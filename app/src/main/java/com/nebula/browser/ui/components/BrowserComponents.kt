@@ -7,6 +7,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -148,8 +151,8 @@ fun AddressBar(
                 colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                     focusedTextColor = MaterialTheme.colorScheme.onSurface,
                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    focusedPlaceholderTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unfocusedPlaceholderTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     cursorColor = NebulaCyan,
                     focusedBorderColor = NebulaPurple,
                     unfocusedBorderColor = NebulaOutline,
@@ -196,7 +199,7 @@ private fun NebulaMark(modifier: Modifier = Modifier) {
         val radius = size.minDimension / 2f
         val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
         drawCircle(Brush.radialGradient(listOf(NebulaPurple.copy(alpha = .36f), Color.Transparent)), radius = radius * 1.45f, center = center)
-        androidx.compose.ui.graphics.drawscope.withTransform({
+        withTransform({
             rotate(-17f, pivot = center)
             scale(1f, .42f, pivot = center)
         }) {
@@ -289,8 +292,8 @@ fun HomePage(
                     focusedBorderColor = NebulaPurple, unfocusedBorderColor = NebulaPurple.copy(alpha = .75f),
                     focusedTextColor = MaterialTheme.colorScheme.onSurface,
                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    focusedPlaceholderTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unfocusedPlaceholderTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     cursorColor = NebulaCyan,
                     focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = .9f),
                     unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = .82f),
