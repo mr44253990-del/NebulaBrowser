@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -37,6 +39,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -61,10 +64,13 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -87,6 +93,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -126,6 +133,7 @@ fun AddressBar(
     onBack: () -> Unit,
     onTabs: () -> Unit,
     onMenu: () -> Unit,
+    onAi: () -> Unit,
 ) {
     var text by remember { mutableStateOf(state.currentUrl) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -175,17 +183,33 @@ fun AddressBar(
             if (state.currentUrl.isNotBlank()) IconButton(onClick = { onNavigate(state.currentUrl) }, modifier = Modifier.size(38.dp)) {
                 Icon(Icons.Default.Refresh, "Reload", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
             }
-            Box {
-                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(40.dp)) {
+            Box(contentAlignment = Alignment.TopEnd) {
+                IconButton(onClick = onTabs, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.Tab, "${state.tabs.size} tabs")
                 }
-                if (state.tabs.isNotEmpty()) Text(
-                    state.tabs.size.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.align(Alignment.Center).clickable(onClick = onTabs),
-                )
+                if (state.tabs.isNotEmpty()) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 1.dp, end = 1.dp),
+                    ) {
+                        Text(
+                            state.tabs.size.toString(),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                        )
+                    }
+                }
+            }
+            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.MoreVert, "Page menu")
+            }
+            Box {
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(text = { Text("Show tabs") }, onClick = { menuExpanded = false; onTabs() })
+                    DropdownMenuItem(text = { Text("Ask Nebula AI") }, onClick = { menuExpanded = false; onAi() })
                     DropdownMenuItem(text = { Text("Browser menu") }, onClick = { menuExpanded = false; onMenu() })
                 }
             }
@@ -594,6 +618,7 @@ fun TabSwitcher(
     var actionTab by remember { mutableStateOf<BrowserTab?>(null) }
     var selectedGroup by remember { mutableStateOf<String?>(null) }
     var tabQuery by remember { mutableStateOf("") }
+    var listMode by remember { mutableStateOf(false) }
     var draggedId by remember { mutableStateOf<String?>(null) }
     var dropTargetId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
@@ -609,6 +634,7 @@ fun TabSwitcher(
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = if (state.canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
             Text("Workspaces & tabs", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             TextButton(onClick = onRestore) { Text("Restore") }
+            IconButton(onClick = { listMode = !listMode }) { Icon(if (listMode) Icons.Default.GridView else Icons.Default.ViewList, if (listMode) "Show grid" else "Show list", tint = MaterialTheme.colorScheme.onSurface) }
             IconButton(onClick = { onNew(false) }) { Icon(Icons.Default.Add, "New tab", tint = NebulaPurple) }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -637,9 +663,26 @@ fun TabSwitcher(
             shape = RoundedCornerShape(18.dp), textStyle = MaterialTheme.typography.bodySmall,
         )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("${tabs.size} tabs · drag the handle onto another tab to group", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            Text("${tabs.size} tabs · drag the handle to group · swipe a preview to close", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             TextButton(onClick = onCloseAll) { Text("Close unpinned", fontSize = 12.sp) }
         }
+        if (listMode) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(tabs, key = { "list_${it.id}" }) { tab ->
+                    TabListRow(
+                        tab = tab,
+                        active = tab.id == state.activeTabId,
+                        onSelect = { onSelect(tab.id) },
+                        onClose = { onClose(tab.id) },
+                        onPin = { onPin(tab.id) },
+                        onLongClick = { actionTab = tab },
+                    )
+                }
+            }
+        } else {
         LazyVerticalGrid(
             modifier = Modifier.weight(1f), columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -699,6 +742,7 @@ fun TabSwitcher(
                 }
             }
         }
+        }
         NebulaBottomBar(state, onBack, onForward, onBack, onReload, { }) { private -> onNew(private) }
     }
     actionTab?.let { tab ->
@@ -722,6 +766,80 @@ fun TabSwitcher(
                 }
             },
         )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TabListRow(
+    tab: BrowserTab,
+    active: Boolean,
+    onSelect: () -> Unit,
+    onClose: () -> Unit,
+    onPin: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    var dragX by remember(tab.id) { mutableStateOf(0f) }
+    val sway by androidx.compose.animation.core.animateFloatAsState(dragX, label = "tabSwipe")
+    val preview = remember(tab.previewPath) { tab.previewPath?.let { android.graphics.BitmapFactory.decodeFile(it) } }
+    GlassCard(
+        Modifier.fillMaxWidth()
+            .graphicsLayer { translationX = sway }
+            .pointerInput(tab.id) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, amount ->
+                        change.consume()
+                        dragX = (dragX + amount).coerceIn(-size.width.toFloat(), 0f)
+                    },
+                    onDragEnd = { if (dragX < -size.width / 3f) onClose() else dragX = 0f },
+                    onDragCancel = { dragX = 0f },
+                )
+            }
+            .combinedClickable(onClick = onSelect, onLongClick = onLongClick),
+        active = active,
+        radius = 16.dp,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFF090612)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (preview != null) {
+                    Image(preview.asImageBitmap(), "Preview of ${tab.title}", modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                } else {
+                    Icon(if (tab.isPrivate) Icons.Default.Lock else Icons.Default.Language, null, tint = NebulaCyan, modifier = Modifier.size(20.dp))
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(tab.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    buildString {
+                        tab.groupName?.let { append(it).append(" · ") }
+                        if (tab.isPrivate) append("Private · ")
+                        append(tab.url.substringAfter("://").substringBefore('/').ifBlank { "New tab" })
+                    },
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onPin, modifier = Modifier.size(34.dp)) {
+                Icon(
+                    Icons.Default.PushPin,
+                    if (tab.isPinned) "Unpin" else "Pin",
+                    modifier = Modifier.size(17.dp),
+                    tint = if (tab.isPinned) NebulaPurple else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onClose, modifier = Modifier.size(34.dp)) {
+                Icon(Icons.Default.Close, "Close", modifier = Modifier.size(17.dp))
+            }
+        }
     }
 }
 

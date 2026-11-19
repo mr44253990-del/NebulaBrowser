@@ -465,6 +465,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                         onProfile = { screen = AppScreen.TABS },
                         onNotifications = { screen = AppScreen.DOWNLOADS },
                         onCommandCenter = { showCommand = true },
+                        onAi = { showAi = true },
                     )
                 }
             }
@@ -593,11 +594,12 @@ private fun BrowserContent(
     onProfile: () -> Unit,
     onNotifications: () -> Unit,
     onCommandCenter: () -> Unit,
+    onAi: () -> Unit,
 ) {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
-            if (!state.settings.bottomToolbar && !state.settings.immersiveMode && state.toolbarVisible) AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu)
+            if (!state.settings.bottomToolbar && !state.settings.immersiveMode && state.toolbarVisible) AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu, onAi)
         },
         bottomBar = {
             Column {
@@ -605,7 +607,7 @@ private fun BrowserContent(
                     TabGroupDock(state, viewModel::selectTab, viewModel::createTabInActiveGroup)
                 }
                 if (state.settings.bottomToolbar && !state.isHome && !state.settings.immersiveMode && state.toolbarVisible) {
-                    AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu)
+                    AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu, onAi)
                 }
                 if (state.isHome) {
                     NebulaBottomBar(state, viewModel::goBack, viewModel::goForward, viewModel::newHomeTab, if (state.loading) viewModel::stop else viewModel::reload, onTabs) { private -> viewModel.createTab(privateMode = private) }
