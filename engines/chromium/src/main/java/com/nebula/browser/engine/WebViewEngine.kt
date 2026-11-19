@@ -263,16 +263,16 @@ private class WebViewSession(
             emitNavigationState()
             if (privateMode) view.clearHistory()
             applyViewportMode()
-            injectUserScripts(url)
+            injectUserScripts(view, url)
         }
 
-        private fun injectUserScripts(url: String) {
+        private fun injectUserScripts(target: WebView, url: String) {
             scriptProvider().filter { it.enabled && it.code.length <= 1_000_000 && it.grants.all { grant -> grant == "none" } }
                 .filter { script -> script.matches.any { pattern -> matchesPattern(url, pattern) } }
                 .forEach { script ->
                     val wrapped: String = "(function(){'use strict';try{" + script.code +
                         "\n}catch(e){console.error('Nebula userscript error',e.message);}})();"
-                    webView.evaluateJavascript(wrapped, null)
+                    target.evaluateJavascript(wrapped, null)
                 }
         }
 
