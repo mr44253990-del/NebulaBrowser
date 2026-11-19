@@ -12,6 +12,6 @@ android {
 dependencies {
     implementation(project(":engines:api"))
     implementation(project(":core:domain"))
-    implementation(libs.androidx.core-ktx)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
 }

@@ -27,7 +27,7 @@ class ExtensionCompatibilityAnalyzer(private val context: Context) {
     }
 
     private fun prepareZip(input: InputStream): ZipInputStream {
-        val header = input.readNBytes(4)
+        val header = input.readExact(4)
         if (header.size >= 2 && header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte()) {
             return ZipInputStream(PrefixInputStream(header, input))
         }
@@ -97,8 +97,19 @@ class ExtensionCompatibilityAnalyzer(private val context: Context) {
         )
     }
 
+    private fun InputStream.readExact(count: Int): ByteArray {
+        val result = ByteArray(count)
+        var offset = 0
+        while (offset < count) {
+            val read = read(result, offset, count - offset)
+            require(read >= 0) { "Unexpected end of package" }
+            offset += read
+        }
+        return result
+    }
+
     private fun InputStream.readLittleEndianInt(): Long {
-        val bytes = readNBytes(4)
+        val bytes = readExact(4)
         require(bytes.size == 4) { "Unexpected end of package" }
         return bytes.foldIndexed(0L) { index, result, byte -> result or ((byte.toLong() and 0xff) shl (index * 8)) }
     }

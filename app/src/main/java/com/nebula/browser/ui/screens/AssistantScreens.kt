@@ -55,9 +55,9 @@ fun ReaderScreen(title: String, text: String, onBack: () -> Unit, onAskAi: () ->
     var fontSize by remember { mutableStateOf(20f) }
     var speaking by remember { mutableStateOf(false) }
     val tts = remember {
-        var engine: TextToSpeech? = null
+        lateinit var engine: TextToSpeech
         engine = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) engine?.language = Locale.getDefault()
+            if (status == TextToSpeech.SUCCESS) engine.language = Locale.getDefault()
         }
         engine
     }
