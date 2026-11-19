@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DesktopWindows
@@ -279,12 +280,23 @@ fun HomePage(
     onRemoveShortcut: (String) -> Unit,
     onMoveShortcut: (String, Int) -> Unit,
     onDeleteSearch: (String) -> Unit,
+    onCommandCenter: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var addDialog by remember { mutableStateOf(false) }
     var editId by remember { mutableStateOf<String?>(null) }
     var tipVisible by remember { mutableStateOf(true) }
     var searchFocused by remember { mutableStateOf(false) }
+    val greeting = remember {
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        when {
+            hour < 5 -> "Still up?"
+            hour < 12 -> "Good morning"
+            hour < 17 -> "Good afternoon"
+            hour < 22 -> "Good evening"
+            else -> "Good night"
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val markPulse = com.nebula.browser.ui.motion.rememberPulse(periodMillis = 3_600)
         val iconSize = when {
@@ -299,7 +311,14 @@ fun HomePage(
                 IconButton(onClick = onProfile, modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = .7f), RoundedCornerShape(50))) {
                     Icon(Icons.Default.Person, "Profile and workspaces", tint = NebulaPurple)
                 }
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(greeting, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, maxLines = 1)
+                    Text("${state.tabs.size} tabs · ${state.bookmarks.size} bookmarks", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+                IconButton(onClick = onCommandCenter, modifier = Modifier.size(42.dp)) {
+                    Icon(Icons.Default.Bolt, "Command center", tint = NebulaCyan)
+                }
                 IconButton(onClick = onNotifications, modifier = Modifier.size(42.dp)) {
                     Icon(Icons.Default.NotificationsNone, "Downloads and activity", tint = MaterialTheme.colorScheme.onBackground)
                 }
@@ -409,6 +428,37 @@ fun HomePage(
                             contentAlignment = Alignment.Center,
                         ) { Icon(Icons.Default.Add, "Add website", tint = NebulaPurple, modifier = Modifier.size(30.dp)) }
                         Text("Add Site", fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                    }
+                }
+            }
+            val activeDownloads = state.downloads.filter {
+                it.status == com.nebula.browser.core.DownloadStatus.RUNNING ||
+                    it.status == com.nebula.browser.core.DownloadStatus.QUEUED ||
+                    it.status == com.nebula.browser.core.DownloadStatus.PAUSED
+            }
+            if (activeDownloads.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                GlassCard(Modifier.fillMaxWidth(), radius = 18.dp, onClick = onNotifications) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(7.dp).background(NebulaCyan, RoundedCornerShape(50)))
+                            Spacer(Modifier.width(7.dp))
+                            Text("Live downloads · ${activeDownloads.size}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Spacer(Modifier.weight(1f))
+                            Text("Open", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                        }
+                        activeDownloads.take(2).forEach { item ->
+                            val animated = androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = item.progress,
+                                animationSpec = androidx.compose.animation.core.tween(600),
+                                label = "downloadProgress",
+                            ).value
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(item.fileName, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                LinearProgressIndicator(progress = { animated }, modifier = Modifier.fillMaxWidth().height(5.dp), trackColor = MaterialTheme.colorScheme.surfaceVariant)
+                                Text("${(animated * 100).toInt()}%", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                 }
             }

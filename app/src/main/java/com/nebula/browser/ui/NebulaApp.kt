@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Code
@@ -135,6 +136,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
     var showFind by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
     var showAi by remember { mutableStateOf(false) }
+    var showCommand by remember { mutableStateOf(false) }
     var showBookmarkEditor by remember { mutableStateOf(false) }
     var fileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     var allowMultipleFiles by remember { mutableStateOf(false) }
@@ -202,12 +204,67 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
         scope.launch { drawerState.close() }
     }
 
+    val commandActions = listOf(
+        com.nebula.browser.ui.sheets.CommandAction("New tab", "Open a fresh tab", Icons.Default.Add) {
+            showCommand = false; viewModel.createTab(); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("New private tab", "No history, cookies cleared on exit", Icons.Default.Lock) {
+            showCommand = false; viewModel.createTab(privateMode = true); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Tabs & workspaces", "Switch, group, duplicate or restore tabs", Icons.Default.Tab) {
+            showCommand = false; screen = AppScreen.TABS
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Add bookmark", "Save the current page", Icons.Default.BookmarkAdd) {
+            showCommand = false; showBookmarkEditor = true; screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Bookmarks", "Your saved pages and folders", Icons.Default.Bookmark) {
+            showCommand = false; screen = AppScreen.BOOKMARKS
+        },
+        com.nebula.browser.ui.sheets.CommandAction("History", "Everything you visited, searchable", Icons.Default.History) {
+            showCommand = false; screen = AppScreen.HISTORY
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Downloads", "Files, progress and retries", Icons.Default.Download) {
+            showCommand = false; screen = AppScreen.DOWNLOADS
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Find in page", "Search text on the current page", Icons.Default.FindInPage) {
+            showCommand = false; showFind = true; screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Reader mode", "Distraction-free text with read-aloud", Icons.Default.FindInPage) {
+            showCommand = false; viewModel.showReader(); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("AI assistant & agent", "Ask about the page or plan a research run", Icons.Default.SmartToy) {
+            showCommand = false; showAi = true; screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Desktop site", "Toggle desktop rendering for this tab", Icons.Default.DesktopWindows) {
+            showCommand = false; viewModel.toggleDesktopMode(); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Save as PDF", "Print or export the current page", Icons.Default.PictureAsPdf) {
+            showCommand = false; viewModel.printPage(); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Page QR code", "Share the current address as a QR", Icons.Default.QrCode) {
+            showCommand = false; if (state.currentUrl.isNotBlank()) showQr = true; screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Password vault", "Encrypted credentials and generator", Icons.Default.Security) {
+            showCommand = false; screen = AppScreen.PASSWORDS
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Extension lab", "Inspect extensions and userscripts", Icons.Default.Extension) {
+            showCommand = false; screen = AppScreen.EXTENSIONS
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Privacy controls", "Blocking, cookies and browsing data", Icons.Default.PrivacyTip) {
+            showCommand = false; screen = AppScreen.PRIVACY
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Settings", "Theme, motion, search and AI", Icons.Default.Settings) {
+            showCommand = false; screen = AppScreen.SETTINGS
+        },
+    )
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = false, // Prevent accidental browser-navigation swipes from opening the drawer.
         drawerContent = {
             ModalDrawerSheet(modifier = androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                 Text("NEBULA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, modifier = Modifier.padding(22.dp), color = MaterialTheme.colorScheme.primary)
+                DrawerItem("Command center", Icons.Default.Bolt) { showCommand = true; scope.launch { drawerState.close() } }
                 DrawerItem("New tab", Icons.Default.Add) { viewModel.createTab(); openScreen(AppScreen.BROWSER) }
                 DrawerItem("New private tab", Icons.Default.Lock) { viewModel.createTab(privateMode = true); openScreen(AppScreen.BROWSER) }
                 DrawerItem("Tabs & workspaces", Icons.Default.Tab) { openScreen(AppScreen.TABS) }
@@ -313,6 +370,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                         onExtensions = { screen = AppScreen.EXTENSIONS },
                         onProfile = { screen = AppScreen.TABS },
                         onNotifications = { screen = AppScreen.DOWNLOADS },
+                        onCommandCenter = { showCommand = true },
                     )
                 }
             }
@@ -365,6 +423,11 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
         viewModel.addBookmark(title, url, folder, tags, notes)
     })
     if (showQr && state.currentUrl.isNotBlank()) QrCodeDialog(state.currentUrl) { showQr = false }
+    if (showCommand) com.nebula.browser.ui.sheets.CommandCenterSheet(
+        subtitle = if (state.currentUrl.isBlank()) "${state.tabs.size} tabs open · ${state.bookmarks.size} bookmarks" else state.currentTitle,
+        actions = commandActions,
+        onDismiss = { showCommand = false },
+    )
     if (showAi) AiAssistantSheet(
         state = state,
         onDismiss = { showAi = false },
@@ -380,6 +443,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
 
     BackHandler {
         when {
+            showCommand -> showCommand = false
             showAi -> showAi = false
             state.openedFile != null -> viewModel.closeFileViewer()
             state.readerVisible -> viewModel.hideReader()
@@ -413,6 +477,7 @@ private fun BrowserContent(
     onExtensions: () -> Unit,
     onProfile: () -> Unit,
     onNotifications: () -> Unit,
+    onCommandCenter: () -> Unit,
 ) {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -436,7 +501,7 @@ private fun BrowserContent(
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (showFind) FindBar(viewModel::findInPage, onFindClose)
             Box(Modifier.fillMaxSize()) {
-                if (state.isHome) HomePage(state, viewModel::navigate, onVoice, onScanQr, onExtensions, onProfile, onNotifications, viewModel::addShortcut, viewModel::removeShortcut, viewModel::moveShortcut, viewModel::deleteSearchQuery)
+                if (state.isHome) HomePage(state, viewModel::navigate, onVoice, onScanQr, onExtensions, onProfile, onNotifications, viewModel::addShortcut, viewModel::removeShortcut, viewModel::moveShortcut, viewModel::deleteSearchQuery, onCommandCenter)
                 else WebSessionView(viewModel.activeSession())
             }
         }
