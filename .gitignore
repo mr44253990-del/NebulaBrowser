@@ -12,3 +12,8 @@ captures/
 *.aab
 *.keystore
 !debug.keystore
+
+# local build artifacts
+build-artifacts/
+*.zip
+!gradle/wrapper/gradle-wrapper.jar
