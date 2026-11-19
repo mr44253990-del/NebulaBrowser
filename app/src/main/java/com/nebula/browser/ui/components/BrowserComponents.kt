@@ -514,18 +514,58 @@ fun HomePage(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun NebulaBottomBar(state: BrowserUiState, onBack: () -> Unit, onForward: () -> Unit, onHome: () -> Unit, onReload: () -> Unit, onTabs: () -> Unit) {
+fun NebulaBottomBar(state: BrowserUiState, onBack: () -> Unit, onForward: () -> Unit, onHome: () -> Unit, onReload: () -> Unit, onTabs: () -> Unit, onNewTab: (Boolean) -> Unit) {
     GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).height(58.dp), radius = 25.dp) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack, enabled = state.canGoBack) { Icon(Icons.Default.ArrowBack, "Back", tint = if (state.canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
             IconButton(onClick = onForward, enabled = state.canGoForward) { Icon(Icons.Default.ArrowForward, "Forward", tint = if (state.canGoForward) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
             Box(Modifier.size(46.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).clickable(onClick = onHome), contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, "Home", tint = MaterialTheme.colorScheme.onPrimary) }
+            Box(
+                Modifier.size(40.dp)
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = .18f), RoundedCornerShape(50))
+                    .combinedClickable(onClick = { onNewTab(false) }, onLongClick = { onNewTab(true) }),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.Add, "New tab. Long press for a private tab", tint = MaterialTheme.colorScheme.secondary) }
             IconButton(onClick = onReload) { Icon(if (state.loading) Icons.Default.Close else Icons.Default.Refresh, "Reload or stop", tint = MaterialTheme.colorScheme.onSurface) }
             Box(contentAlignment = Alignment.Center) {
                 IconButton(onClick = onTabs) { Icon(Icons.Default.Tab, "Tabs", tint = MaterialTheme.colorScheme.onSurface) }
                 Text(state.tabs.size.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 2.dp))
             }
+        }
+    }
+}
+
+/**
+ * Compact bottom action bar while a page is open. It keeps new tab, back/forward and
+ * the tab count within thumb reach without covering the address bar.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun NebulaQuickBar(
+    state: BrowserUiState,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onNewTab: (Boolean) -> Unit,
+    onTabs: () -> Unit,
+    onMenu: () -> Unit,
+) {
+    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).height(54.dp), radius = 22.dp) {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, enabled = state.canGoBack) { Icon(Icons.Default.ArrowBack, "Back", tint = if (state.canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
+            IconButton(onClick = onForward, enabled = state.canGoForward) { Icon(Icons.Default.ArrowForward, "Forward", tint = if (state.canGoForward) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
+            Box(
+                Modifier.size(42.dp)
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = .2f), RoundedCornerShape(50))
+                    .combinedClickable(onClick = { onNewTab(false) }, onLongClick = { onNewTab(true) }),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.Add, "New tab. Long press for a private tab", tint = MaterialTheme.colorScheme.secondary) }
+            Box(contentAlignment = Alignment.Center) {
+                IconButton(onClick = onTabs) { Icon(Icons.Default.Tab, "Tabs", tint = MaterialTheme.colorScheme.onSurface) }
+                Text(state.tabs.size.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 2.dp))
+            }
+            IconButton(onClick = onMenu) { Icon(Icons.Default.MoreVert, "Menu", tint = MaterialTheme.colorScheme.onSurface) }
         }
     }
 }
@@ -659,7 +699,7 @@ fun TabSwitcher(
                 }
             }
         }
-        NebulaBottomBar(state, onBack, onForward, onBack, onReload) { }
+        NebulaBottomBar(state, onBack, onForward, onBack, onReload, { }) { private -> onNew(private) }
     }
     actionTab?.let { tab ->
         var title by remember(tab.id) { mutableStateOf(tab.title) }

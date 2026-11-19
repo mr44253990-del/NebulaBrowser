@@ -98,6 +98,7 @@ import com.nebula.browser.ui.components.AddressBar
 import com.nebula.browser.ui.components.FindBar
 import com.nebula.browser.ui.components.HomePage
 import com.nebula.browser.ui.components.NebulaBottomBar
+import com.nebula.browser.ui.components.NebulaQuickBar
 import com.nebula.browser.ui.components.SpaceBackground
 import com.nebula.browser.ui.components.TabGroupDock
 import com.nebula.browser.ui.components.BookmarkEditorDialog
@@ -590,7 +591,9 @@ private fun BrowserContent(
                     AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu)
                 }
                 if (state.isHome) {
-                    NebulaBottomBar(state, viewModel::goBack, viewModel::goForward, viewModel::newHomeTab, if (state.loading) viewModel::stop else viewModel::reload, onTabs)
+                    NebulaBottomBar(state, viewModel::goBack, viewModel::goForward, viewModel::newHomeTab, if (state.loading) viewModel::stop else viewModel::reload, onTabs) { private -> viewModel.createTab(privateMode = private) }
+                } else if (!state.settings.bottomToolbar && !state.settings.immersiveMode && state.toolbarVisible) {
+                    NebulaQuickBar(state, viewModel::goBack, viewModel::goForward, { private -> viewModel.createTab(privateMode = private) }, onTabs, onMenu)
                 }
             }
         },
