@@ -301,8 +301,10 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                 DrawerItem("Desktop site: ${if (state.desktopMode) "on" else "off"}", Icons.Default.DesktopWindows) { viewModel.toggleDesktopMode(); openScreen(AppScreen.BROWSER) }
                 DrawerItem("Save / print PDF", Icons.Default.PictureAsPdf) { viewModel.printPage(); openScreen(AppScreen.BROWSER) }
                 DrawerItem("Share page", Icons.Default.Share) {
-                    val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, state.currentUrl) }
-                    context.startActivity(Intent.createChooser(share, "Share page"))
+                    runCatching {
+                        val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, state.currentUrl) }
+                        context.startActivity(Intent.createChooser(share, "Share page"))
+                    }
                     openScreen(AppScreen.BROWSER)
                 }
                 DrawerItem("Page QR code", Icons.Default.QrCode) { if (state.currentUrl.isNotBlank()) showQr = true; openScreen(AppScreen.BROWSER) }

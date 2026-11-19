@@ -1,23 +1,22 @@
 # Nebula Browser R8 rules.
 #
-# The engine contract and the shared core models are reached through generated
-# Room code, reflection-free JSON parsing and the WebView bridge, so keep them
-# intact. Compose, OkHttp, Room and coroutines all ship their own consumer rules.
+# Release builds are minified, so a missing keep rule only shows up at runtime.
+# The app, its shared models and the engine contract are kept intact; shrinking
+# still removes unused libraries and resources.
 
 -keepattributes Signature
 -keepattributes *Annotation*
 -keepattributes InnerClasses
 -keepattributes EnclosingMethod
+-keepattributes SourceFile,LineNumberTable
 
--keep class com.nebula.browser.core.** { *; }
--keep interface com.nebula.browser.core.** { *; }
--keep class com.nebula.browser.engine.** { *; }
--keep interface com.nebula.browser.engine.** { *; }
+-keep class com.nebula.browser.** { *; }
+-keep interface com.nebula.browser.** { *; }
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
 
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
-
-# Keep the download service and receiver referenced from the manifest.
--keep class com.nebula.browser.browser.DownloadProgressService { *; }
--keep class com.nebula.browser.browser.DownloadCompleteReceiver { *; }

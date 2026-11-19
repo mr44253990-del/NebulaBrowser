@@ -46,7 +46,14 @@ class DownloadProgressService : Service() {
         if (running) return
         running = true
         scope.launch {
-            startForegroundCompat(SUMMARY_ID, buildNotification(SUMMARY_ID, "Nebula downloads", "Preparing download…", 0, true))
+            val foregroundStarted = runCatching {
+                startForegroundCompat(SUMMARY_ID, buildNotification(SUMMARY_ID, "Nebula downloads", "Preparing download…", 0, true))
+            }.isSuccess
+            if (!foregroundStarted) {
+                running = false
+                stopSelf(startId)
+                return@launch
+            }
             try {
                 while (isActive) {
                     val snapshots = activeSnapshots()

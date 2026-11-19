@@ -98,7 +98,7 @@ The AI agent is intentionally not an unrestricted arbitrary-action system. See t
 - Home shows a time-of-day greeting, live tab/bookmark counts and a live download card.
 - New page tools: screenshot, save as Markdown, save as HTML, copy article text, clear cookies/site data, and copy download links.
 - Release builds are R8-minified with resource shrinking and published next to the debug APK by CI.
-- Startup is faster: the System WebView provider is warmed on a background thread, and a Compose stability configuration keeps the shared models from triggering wide recomposition. Version 4.0.0 (versionCode 6).
+- Startup is faster and safer: live WebViews are restored lazily (four at a time) and a startup guard recovers from a previous crash instead of repeating it. Version 4.0.1 (versionCode 7).
 
 ## Privacy and limitations
 

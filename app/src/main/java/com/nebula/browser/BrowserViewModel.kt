@@ -149,13 +149,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
     private val _effects = MutableSharedFlow<UiEffect>(extraBufferCapacity = 16)
     val effects: SharedFlow<UiEffect> = _effects.asSharedFlow()
+    private val runtimePrefs by lazy {
+        getApplication<Application>().getSharedPreferences("nebula_runtime", android.content.Context.MODE_PRIVATE)
+    }
 
     init {
         viewModelScope.launch {
             settingsRepository.settings.collectLatest { settings ->
                 _state.update { it.copy(settings = settings) }
                 sessions.values.forEach { it.setJavaScriptEnabled(settings.javaScriptEnabled) }
-                WebView.setWebContentsDebuggingEnabled(settings.developerMode)
+                runCatching { WebView.setWebContentsDebuggingEnabled(settings.developerMode) }
             }
         }
         viewModelScope.launch { searchRepository.topSearches.collectLatest { list -> _state.update { it.copy(recentSearches = list) } } }
@@ -176,7 +179,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun createTab(privateMode: Boolean = false, url: String = "", workspaceId: String = _state.value.activeWorkspaceId) {
         val tab = BrowserTab(isPrivate = privateMode, workspaceId = workspaceId)
         viewModelScope.launch(Dispatchers.IO) { tabRepository.save(tab) }
-        sessions[tab.id] = engine.createSession(tab.id, privateMode).also(::observeSession)
+        ensureSession(tab)
         _state.update {
             it.copy(
                 tabs = it.tabs + tab,
@@ -196,7 +199,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun selectTab(id: String) {
         if (_state.value.activeTabId != id) persistSession(_state.value.activeTabId)
         val tab = _state.value.tabs.firstOrNull { it.id == id } ?: return
-        val session = sessions[id]
+        // Sessions are created lazily, so a tab restored from disk gets its WebView now.
+        val session = sessions[id] ?: ensureSession(tab)
         updateTab(id) { it.copy(lastOpenedAt = System.currentTimeMillis()) }
         _state.update {
             it.copy(
@@ -839,21 +843,74 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }) }
     }
 
+    /**
+     * Restores the tab list defensively. Saved WebView state can be corrupt after a
+     * System WebView update, and restoring it eagerly used to crash the app on every
+     * launch. Live WebViews are now created lazily and capped, so a single bad tab can
+     * never take the whole session down.
+     */
     private fun restoreSavedTabs() {
         viewModelScope.launch {
-            val saved = withContext(Dispatchers.IO) { tabRepository.savedTabs() }.sortedBy { it.createdAt }
-            if (saved.isEmpty()) return@launch createTab()
-            saved.forEach { tab ->
-                val session = engine.createSession(tab.id, false).also(::observeSession)
-                sessions[tab.id] = session
-                session.setDesktopMode(tab.desktopMode)
-                val stateFile = sessionFile(tab.id)
-                if (stateFile.exists() && stateFile.length() in 1..12 * 1024 * 1024) session.restoreState(stateFile.readBytes())
-                else if (tab.url.isNotBlank()) session.loadUrl(tab.url)
+            val crashedDuringStartup = runtimePrefs.getBoolean(KEY_STARTUP_IN_PROGRESS, false)
+            runtimePrefs.edit().putBoolean(KEY_STARTUP_IN_PROGRESS, true).apply()
+
+            val saved = runCatching {
+                withContext(Dispatchers.IO) { tabRepository.savedTabs() }
+            }.getOrDefault(emptyList()).sortedBy { it.createdAt }
+
+            if (saved.isEmpty()) {
+                finishStartup()
+                return@launch createTab()
             }
+
+            if (crashedDuringStartup) {
+                // The previous process died while restoring. Drop every saved snapshot
+                // and let the tabs reload from their URLs instead of repeating the crash.
+                saved.forEach { tab -> runCatching { sessionFile(tab.id).delete() } }
+                message("Recovered from a previous startup problem. Saved pages will reload.")
+            }
+
             _state.update { it.copy(tabs = saved) }
-            saved.maxByOrNull { it.lastOpenedAt }?.let { selectTab(it.id) } ?: saved.firstOrNull()?.let { selectTab(it.id) }
+            saved.sortedByDescending { it.lastOpenedAt }
+                .take(MAX_EAGER_SESSIONS)
+                .forEach { tab -> ensureSession(tab) }
+            val active = saved.maxByOrNull { it.lastOpenedAt } ?: saved.first()
+            selectTab(active.id)
+            finishStartup()
         }
+    }
+
+    /**
+     * Returns the live session for [tab], creating it on demand. Every native step is
+     * guarded: a missing or updating WebView must degrade to a message, never a crash.
+     */
+    private fun ensureSession(tab: BrowserTab): BrowserSession? {
+        sessions[tab.id]?.let { return it }
+        val session = runCatching { engine.createSession(tab.id, tab.isPrivate) }
+            .onFailure { message("System WebView is unavailable. ${it.message.orEmpty()}".trim()) }
+            .getOrNull() ?: return null
+        observeSession(session)
+        sessions[tab.id] = session
+        runCatching { session.setDesktopMode(tab.desktopMode) }
+
+        val stateFile = sessionFile(tab.id)
+        val restored = runCatching {
+            if (stateFile.exists() && stateFile.length() in 1..12L * 1024 * 1024) {
+                session.restoreState(stateFile.readBytes())
+                true
+            } else {
+                false
+            }
+        }.getOrDefault(false)
+        if (!restored) {
+            if (stateFile.exists()) runCatching { stateFile.delete() }
+            if (tab.url.isNotBlank()) runCatching { session.loadUrl(tab.url) }
+        }
+        return session
+    }
+
+    private fun finishStartup() {
+        runtimePrefs.edit().putBoolean(KEY_STARTUP_IN_PROGRESS, false).apply()
     }
 
     fun persistSessions() {
@@ -899,5 +956,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private companion object {
         val BUILT_IN_FILE_TYPES = setOf("txt", "log", "json", "xml", "csv", "md", "html", "htm", "css", "js", "kt", "java", "py", "jpg", "jpeg", "png", "gif", "webp", "bmp", "pdf", "zip", "mp3", "wav", "ogg", "m4a", "mp4", "webm", "mkv", "3gp")
+
+        /** Live WebViews restored right after launch; the rest are created on demand. */
+        const val MAX_EAGER_SESSIONS = 4
+        const val KEY_STARTUP_IN_PROGRESS = "startup_in_progress"
     }
 }

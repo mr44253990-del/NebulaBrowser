@@ -1,11 +1,13 @@
 package com.nebula.browser.ui.screens
 
+import android.content.Intent
 import androidx.biometric.BiometricPrompt
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -51,6 +55,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -68,6 +74,9 @@ import com.nebula.browser.BrowserUiState
 import com.nebula.browser.core.BrowserSettings
 import com.nebula.browser.core.PasswordCredential
 import com.nebula.browser.ui.components.GlassCard
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,25 +88,28 @@ fun PasswordsScreen(
     onDelete: (String) -> Unit,
     onGenerate: () -> String,
 ) {
-    val activity = LocalContext.current as FragmentActivity
+    val activity = LocalContext.current as? FragmentActivity
     var unlocked by remember { mutableStateOf(false) }
     var editorVisible by remember { mutableStateOf(false) }
     var visiblePasswordId by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
 
     fun authenticate() {
-        val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), object : BiometricPrompt.AuthenticationCallback() {
+        val host = activity ?: return
+        val prompt = BiometricPrompt(host, ContextCompat.getMainExecutor(host), object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 unlocked = true
                 onUnlocked()
             }
         })
-        prompt.authenticate(BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock Nebula Vault")
-            .setSubtitle("Your credentials are protected by Android Keystore")
-            .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG)
-            .setNegativeButtonText("Cancel")
-            .build())
+        runCatching {
+            prompt.authenticate(BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Unlock Nebula Vault")
+                .setSubtitle("Your credentials are protected by Android Keystore")
+                .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .setNegativeButtonText("Cancel")
+                .build())
+        }
     }
 
     Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = {
@@ -314,7 +326,11 @@ fun SettingsScreen(
             }, modifier = Modifier.fillMaxWidth()) { Text("Save AI configuration securely") } }
             item { Text("The API key is encrypted with Android Keystore. Nebula sends page content directly to your configured provider; it has no Nebula server.", style = MaterialTheme.typography.bodySmall) }
             item { HorizontalDivider() }
-            item { Text("Nebula Browser ${com.nebula.browser.BuildConfig.VERSION_NAME}\nChromium System WebView · Kotlin · Material 3\nNo account, analytics, or remote browser-data collection.") }
+            item { Text("Diagnostics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+            item { Text("If Nebula crashes, the report stays on this device until you copy or share it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { DiagnosticsSection() }
+            item { HorizontalDivider() }
+            item { Text("Nebula Browser ${com.nebula.browser.BuildConfig.VERSION_NAME} · ${com.nebula.browser.BuildConfig.BUILD_TYPE}\nChromium System WebView · Kotlin · Material 3\nNo account, analytics, or remote browser-data collection.") }
         }
     }
 
@@ -333,6 +349,92 @@ fun SettingsScreen(
             confirmButton = { Button(onClick = { onAddEngine(name, keyword, url); engineDialog = false }) { Text("Add") } },
             dismissButton = { TextButton(onClick = { engineDialog = false }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun DiagnosticsSection() {
+    val context = LocalContext.current
+    var log by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf("") }
+    var reloadKey by remember { mutableStateOf(0) }
+    var lastCrash by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(reloadKey) {
+        log = withContext(Dispatchers.IO) {
+            val file = File(context.filesDir, "crash-report.log")
+            if (file.exists()) file.readText().takeLast(24_000) else ""
+        }
+        lastCrash = context.getSharedPreferences("nebula_runtime", android.content.Context.MODE_PRIVATE)
+            .getLong("last_crash_at", 0L)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            when {
+                log.isBlank() -> "No crash has been recorded on this device."
+                lastCrash > 0 -> "Last crash: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(lastCrash))}"
+                else -> "Crash report available."
+            },
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (log.isNotBlank()) {
+            SelectionContainer {
+                Text(
+                    log.takeLast(1500),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState()),
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { reloadKey++ }) { Text("Refresh") }
+            OutlinedButton(
+                onClick = {
+                    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Nebula crash log", log))
+                    status = "Crash log copied to the clipboard"
+                },
+                enabled = log.isNotBlank(),
+            ) { Text("Copy") }
+            OutlinedButton(
+                onClick = {
+                    runCatching {
+                        val share = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "Nebula Browser crash report")
+                            putExtra(Intent.EXTRA_TEXT, log)
+                        }
+                        context.startActivity(Intent.createChooser(share, "Share crash log"))
+                    }
+                    status = "Opening the share sheet"
+                },
+                enabled = log.isNotBlank(),
+            ) { Text("Share") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = {
+                runCatching { File(context.filesDir, "crash-report.log").delete() }
+                log = ""
+                lastCrash = 0L
+                status = "Crash log cleared"
+            }) { Text("Clear log") }
+            TextButton(onClick = {
+                runCatching {
+                    File(context.filesDir, "sessions").deleteRecursively()
+                    File(context.filesDir, "previews").deleteRecursively()
+                    File(context.filesDir, "crash-report.log").delete()
+                }
+                context.getSharedPreferences("nebula_runtime", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+                log = ""
+                lastCrash = 0L
+                status = "Saved tab state cleared. Restart Nebula for a clean start."
+            }) { Text("Start clean") }
+        }
+        if (status.isNotBlank()) {
+            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
     }
 }
 

@@ -1,5 +1,17 @@
 # Nebula Browser 4.0
 
+## 4.0.1 — crash fix
+
+- Removed the background WebView warm-up that created a WebView off the main thread during `Application.onCreate`; it could abort startup on some devices.
+- Startup tab restore is now guarded per tab. A corrupt or outdated saved WebView snapshot is deleted and the URL reloads instead of crashing on every launch.
+- Live WebViews are created lazily and capped at four at launch, which also removes a low-memory crash with many tabs.
+- If the previous process died during restore, the next launch starts without snapshots and says so.
+- WebView creation, desktop mode, state restore and debugging flags are all wrapped so a missing or updating System WebView degrades to a message.
+- Download progress service and share intents no longer throw on restricted Android versions.
+- Settings → **Diagnostics**: view, copy, share or clear the on-device crash report, and start clean.
+- Release keep rules now cover the whole app package, so the R8-minified APK cannot lose app classes that Compose reaches indirectly.
+- Version `4.0.1` (versionCode 7).
+
 ## Added
 
 - **Dynamic theming** — Material You wallpaper palette on Android 12+, six curated

@@ -77,7 +77,8 @@ is deliberately absent.
 | R8 minification and resource shrinking | Enabled for release |
 | Debug-signed release artifact in CI | Enabled |
 | Gradle build cache and parallel builds | Enabled |
-| WebView provider pre-warm at startup | Enabled |
+| Lazy tab-session restore (max 4 live WebViews at launch) | Enabled |
+| Startup crash recovery and guarded WebView creation | Enabled |
 | Compose stability configuration for shared models | Enabled |
 | Baseline profiles / startup macrobenchmarks | Not yet |
 | Room paging for large histories | Not yet |
