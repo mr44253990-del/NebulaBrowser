@@ -147,8 +147,8 @@ fun PasswordsScreen(
                                 }
                             },
                             modifier = Modifier.clickable {
-                                val clipboard = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Nebula credential", credential.password))
+                                val clipboard = activity?.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Nebula credential", credential.password))
                             },
                         )
                         HorizontalDivider()
