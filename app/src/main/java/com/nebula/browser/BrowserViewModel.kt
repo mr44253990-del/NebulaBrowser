@@ -531,16 +531,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun pauseDownload(id: Long) = viewModelScope.launch {
-        val paused = downloadController.pause(id)
-        message(if (paused) "Download paused" else "Android cannot pause this download")
-        runCatching { downloadController.refresh() }
-    }
-
-    fun resumeDownload(id: Long) = viewModelScope.launch {
-        val resumed = downloadController.resume(id)
-        message(if (resumed) "Download resumed" else "Android cannot resume this download")
-        runCatching { downloadController.refresh() }
+    fun copyDownloadLink(id: Long) {
+        val item = _state.value.downloads.firstOrNull { it.id == id } ?: return
+        val clipboard = getApplication<Application>().getSystemService(android.content.ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(item.fileName, item.url))
+        message("Download link copied")
     }
 
     fun clearSiteData() = viewModelScope.launch {

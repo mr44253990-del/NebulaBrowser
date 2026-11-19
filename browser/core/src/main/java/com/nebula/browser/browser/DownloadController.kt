@@ -92,17 +92,6 @@ class DownloadController(context: Context, private val database: NebulaDatabase)
         dao.byId(id)?.let { dao.save(it.copy(status = DownloadStatus.CANCELLED.name)) }
     }
 
-    /** Android's DownloadManager supports pause/resume for HTTP(S) downloads on API 24+. */
-    fun pause(id: Long): Boolean = runCatching {
-        manager.pauseDownload(id)
-        true
-    }.getOrDefault(false)
-
-    fun resume(id: Long): Boolean = runCatching {
-        manager.resumeDownload(id)
-        true
-    }.getOrDefault(false)
-
     suspend fun remove(id: Long) = withContext(Dispatchers.IO) {
         manager.remove(id)
         dao.deleteById(id)
