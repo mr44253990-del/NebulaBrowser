@@ -1,0 +1,245 @@
+package com.nebula.browser.engine
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
+import android.net.http.SslError
+import android.print.PrintAttributes
+import android.print.PrintManager
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
+import android.webkit.SslErrorHandler
+import android.webkit.URLUtil
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import java.io.ByteArrayInputStream
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+
+data class EnginePrivacyConfig(
+    val adBlockEnabled: Boolean = true,
+    val blockThirdPartyCookies: Boolean = true,
+    val javaScriptEnabled: Boolean = true,
+)
+
+/** Android System WebView (Chromium) engine. This is not a desktop extension runtime. */
+class WebViewEngine(
+    private val context: Context,
+    private val privacyConfig: () -> EnginePrivacyConfig,
+) : BrowserEngine {
+    override fun createSession(tabId: String, privateMode: Boolean): BrowserSession =
+        WebViewSession(context, tabId, privateMode, privacyConfig)
+
+    override fun clearCache() = Unit // Each session owns and clears its WebView cache.
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+private class WebViewSession(
+    private val context: Context,
+    override val tabId: String,
+    private val privateMode: Boolean,
+    private val privacyConfig: () -> EnginePrivacyConfig,
+) : BrowserSession {
+    private val mutableEvents = MutableSharedFlow<EngineEvent>(extraBufferCapacity = 64)
+    override val events: Flow<EngineEvent> = mutableEvents
+    private var destroyed = false
+
+    private val webView = WebView(context).apply {
+        layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        settings.apply {
+            javaScriptEnabled = privacyConfig().javaScriptEnabled
+            domStorageEnabled = !privateMode
+            databaseEnabled = !privateMode
+            loadsImagesAutomatically = true
+            builtInZoomControls = true
+            displayZoomControls = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            mediaPlaybackRequiresUserGesture = false
+            allowFileAccess = false
+            allowContentAccess = true
+            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            safeBrowsingEnabled = true
+            cacheMode = if (privateMode) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_DEFAULT
+            userAgentString = userAgentString.replace("; wv", "")
+        }
+        isSaveEnabled = !privateMode
+        webViewClient = createClient()
+        webChromeClient = createChromeClient()
+        setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+            mutableEvents.tryEmit(EngineEvent.DownloadRequested(
+                tabId, url, fileName, mimeType, userAgent, contentDisposition, contentLength
+            ))
+        }
+    }
+
+    init {
+        CookieManager.getInstance().apply {
+            setAcceptCookie(!privateMode)
+            setAcceptThirdPartyCookies(webView, !privateMode && !privacyConfig().blockThirdPartyCookies)
+        }
+    }
+
+    override val canGoBack: Boolean get() = !destroyed && webView.canGoBack()
+    override val canGoForward: Boolean get() = !destroyed && webView.canGoForward()
+    override val currentUrl: String? get() = if (destroyed) null else webView.url
+
+    override fun attach(container: FrameLayout) {
+        if (destroyed) return
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        if (webView.parent == null) container.addView(webView)
+        webView.onResume()
+    }
+
+    override fun detach() {
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        webView.onPause()
+    }
+
+    override fun loadUrl(url: String) {
+        if (!destroyed) webView.loadUrl(url)
+    }
+
+    override fun goBack() { if (canGoBack) webView.goBack() }
+    override fun goForward() { if (canGoForward) webView.goForward() }
+    override fun reload() { if (!destroyed) webView.reload() }
+    override fun stopLoading() { if (!destroyed) webView.stopLoading() }
+
+    override fun setDesktopMode(enabled: Boolean) {
+        if (destroyed) return
+        webView.settings.userAgentString = if (enabled) DESKTOP_USER_AGENT else null
+        webView.settings.useWideViewPort = true
+        webView.settings.loadWithOverviewMode = enabled
+    }
+
+    override fun setJavaScriptEnabled(enabled: Boolean) {
+        webView.settings.javaScriptEnabled = enabled
+    }
+
+    override fun evaluateJavaScript(script: String, callback: (String?) -> Unit) {
+        if (destroyed) return callback(null)
+        webView.evaluateJavascript(script) { value -> callback(value?.let(::decodeJavascriptString)) }
+    }
+
+    override fun findInPage(query: String) { if (!destroyed) webView.findAllAsync(query) }
+    override fun clearFind() { if (!destroyed) webView.clearMatches() }
+
+    override fun printPage() {
+        if (destroyed) return
+        val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+        val adapter = webView.createPrintDocumentAdapter(webView.title ?: "Nebula page")
+        printManager.print("Nebula Browser", adapter, PrintAttributes.Builder().build())
+    }
+
+    override fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        detach()
+        webView.stopLoading()
+        webView.clearHistory()
+        if (privateMode) webView.clearCache(true)
+        webView.destroy()
+    }
+
+    private fun createClient() = object : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            val scheme = request.url.scheme ?: return true
+            if (scheme == "http" || scheme == "https" || scheme == "about" || scheme == "data") return false
+            mutableEvents.tryEmit(EngineEvent.ExternalRequest(tabId, request.url.toString()))
+            return true
+        }
+
+        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            mutableEvents.tryEmit(EngineEvent.PageStarted(tabId, url, favicon))
+            emitNavigationState()
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            mutableEvents.tryEmit(EngineEvent.UrlChanged(tabId, url))
+            mutableEvents.tryEmit(EngineEvent.LoadingChanged(tabId, false))
+            emitNavigationState()
+            if (privateMode) view.clearHistory()
+        }
+
+        override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+            handler.cancel()
+            mutableEvents.tryEmit(EngineEvent.Error(tabId, "Secure connection failed: certificate validation error"))
+        }
+
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+            val host = request.url.host?.lowercase() ?: return null
+            if (privacyConfig().adBlockEnabled && isBlockedHost(host)) {
+                mutableEvents.tryEmit(EngineEvent.BlockedRequest(tabId, host))
+                return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+            }
+            return null
+        }
+    }
+
+    private fun createChromeClient() = object : WebChromeClient() {
+        override fun onProgressChanged(view: WebView, newProgress: Int) {
+            mutableEvents.tryEmit(EngineEvent.ProgressChanged(tabId, newProgress))
+            mutableEvents.tryEmit(EngineEvent.LoadingChanged(tabId, newProgress < 100))
+        }
+
+        override fun onReceivedTitle(view: WebView, title: String) {
+            mutableEvents.tryEmit(EngineEvent.TitleChanged(tabId, title))
+        }
+
+        override fun onReceivedIcon(view: WebView, icon: Bitmap?) = Unit
+
+        override fun onPermissionRequest(request: PermissionRequest) {
+            // Secure default. Native runtime permission integration must explicitly grant resources.
+            request.deny()
+        }
+
+        override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
+            callback.invoke(origin, false, false)
+        }
+
+        override fun onShowFileChooser(
+            webView: WebView,
+            filePathCallback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams,
+        ): Boolean {
+            mutableEvents.tryEmit(EngineEvent.FileChooserRequested(
+                tabId,
+                filePathCallback,
+                fileChooserParams.acceptTypes,
+                fileChooserParams.mode == FileChooserParams.MODE_OPEN_MULTIPLE,
+            ))
+            return true
+        }
+    }
+
+    private fun emitNavigationState() {
+        mutableEvents.tryEmit(EngineEvent.NavigationStateChanged(tabId, webView.canGoBack(), webView.canGoForward()))
+    }
+
+    private fun decodeJavascriptString(raw: String): String = runCatching {
+        org.json.JSONObject("{value:$raw}").optString("value")
+    }.getOrDefault(raw)
+
+    private companion object {
+        const val DESKTOP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        val BLOCKED_HOST_SUFFIXES = setOf(
+            "doubleclick.net", "google-analytics.com", "googlesyndication.com", "googletagmanager.com",
+            "facebook.net", "adservice.google.com", "ads.yahoo.com", "amazon-adsystem.com",
+            "adnxs.com", "adsrvr.org", "criteo.com", "criteo.net", "outbrain.com", "taboola.com",
+            "scorecardresearch.com", "quantserve.com", "chartbeat.com", "hotjar.com", "mouseflow.com",
+            "branch.io", "appsflyer.com", "adjust.com", "mixpanel.com", "segment.io", "fullstory.com",
+        )
+
+        fun isBlockedHost(host: String): Boolean = BLOCKED_HOST_SUFFIXES.any { host == it || host.endsWith(".$it") }
+    }
+}
