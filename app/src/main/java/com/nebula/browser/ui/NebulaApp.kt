@@ -106,6 +106,7 @@ import com.nebula.browser.ui.components.QrCodeDialog
 import com.nebula.browser.ui.components.TabSwitcher
 import com.nebula.browser.ui.components.WebSessionView
 import com.nebula.browser.ui.screens.AiAssistantSheet
+import com.nebula.browser.ui.screens.AiChatScreen
 import com.nebula.browser.ui.screens.AiConsentDialog
 import com.nebula.browser.ui.screens.BookmarksScreen
 import com.nebula.browser.ui.screens.DownloadsScreen
@@ -147,6 +148,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
     var showFind by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
     var showAi by remember { mutableStateOf(false) }
+    var showAiFull by remember { mutableStateOf(false) }
     var showCommand by remember { mutableStateOf(false) }
     var showBookmarkEditor by remember { mutableStateOf(false) }
     var fileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
@@ -306,7 +308,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                 "Page tools" to listOf(
                     DrawerEntry("Add bookmark", Icons.Default.BookmarkAdd) { showBookmarkEditor = true; openScreen(AppScreen.BROWSER) },
                     DrawerEntry("Reader mode", Icons.Default.FindInPage) { viewModel.showReader(); openScreen(AppScreen.BROWSER) },
-                    DrawerEntry("AI page assistant", Icons.Default.SmartToy) { showAi = true; openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("AI page assistant", Icons.Default.SmartToy) { showAiFull = true; openScreen(AppScreen.BROWSER) },
                     DrawerEntry("Find in page", Icons.Default.FindInPage) { showFind = true; openScreen(AppScreen.BROWSER) },
                     DrawerEntry("Desktop site: ${if (state.desktopMode) "on" else "off"}", Icons.Default.DesktopWindows) { viewModel.toggleDesktopMode(); openScreen(AppScreen.BROWSER) },
                     DrawerEntry("Save / print PDF", Icons.Default.PictureAsPdf) { viewModel.printPage(); openScreen(AppScreen.BROWSER) },
@@ -520,9 +522,23 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
         actions = commandActions,
         onDismiss = { showCommand = false },
     )
+    if (showAiFull) AiChatScreen(
+        state = state,
+        onBack = { showAiFull = false },
+        onAsk = viewModel::prepareAi,
+        onClear = viewModel::clearAiResponse,
+        onOpenSettings = { showAiFull = false; screen = AppScreen.SETTINGS },
+        onStartAgent = viewModel::startAgent,
+        onConfirmAgent = viewModel::confirmAgentPlan,
+        onDismissAgentPlan = viewModel::dismissAgentPlan,
+        onCancelAgent = viewModel::cancelAgent,
+        onExportChat = viewModel::exportAiChat,
+        onExportReport = viewModel::exportAgentReport,
+    )
     if (showAi) AiAssistantSheet(
         state = state,
         onDismiss = { showAi = false },
+        onExpand = { showAi = false; showAiFull = true },
         onAsk = viewModel::prepareAi,
         onClear = viewModel::clearAiResponse,
         onOpenSettings = { showAi = false; screen = AppScreen.SETTINGS },
@@ -536,6 +552,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
     BackHandler {
         when {
             showCommand -> showCommand = false
+            showAiFull -> showAiFull = false
             showAi -> showAi = false
             state.openedFile != null -> viewModel.closeFileViewer()
             state.readerVisible -> viewModel.hideReader()

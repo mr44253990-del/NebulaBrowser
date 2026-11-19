@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Stop
@@ -94,6 +95,7 @@ fun ReaderScreen(title: String, text: String, onBack: () -> Unit, onAskAi: () ->
 fun AiAssistantSheet(
     state: com.nebula.browser.BrowserUiState,
     onDismiss: () -> Unit,
+    onExpand: () -> Unit,
     onAsk: (String) -> Unit,
     onClear: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -108,7 +110,19 @@ fun AiAssistantSheet(
     val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("NEBULA INTELLIGENCE", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("NEBULA INTELLIGENCE", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        if (state.isHome) "Open a page to ask about it" else state.currentTitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+                TextButton(onClick = onExpand) { Text("Expand") }
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close AI panel") }
+            }
             androidx.compose.material3.TabRow(selectedTabIndex = if (mode == "Assistant") 0 else 1, containerColor = Color.Transparent) {
                 androidx.compose.material3.Tab(selected = mode == "Assistant", onClick = { mode = "Assistant" }, text = { Text("Page assistant") })
                 androidx.compose.material3.Tab(selected = mode == "Agent", onClick = { mode = "Agent" }, text = { Text("Research agent") })

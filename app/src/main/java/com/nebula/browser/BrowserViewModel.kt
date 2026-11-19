@@ -73,6 +73,15 @@ data class PendingAiRequest(
     val question: String,
 )
 
+enum class AiChatRole { USER, ASSISTANT }
+
+data class AiChatMessage(
+    val id: Long = System.nanoTime(),
+    val role: AiChatRole,
+    val text: String,
+    val pending: Boolean = false,
+)
+
 data class BrowserUiState(
     val tabs: List<BrowserTab> = emptyList(),
     val activeTabId: String = "",
@@ -96,6 +105,7 @@ data class BrowserUiState(
     val readerText: String = "",
     val aiLoading: Boolean = false,
     val aiResponse: String = "",
+    val aiChat: List<AiChatMessage> = emptyList(),
     val aiConsent: PendingAiRequest? = null,
     val pendingPermission: SitePermissionRequest? = null,
     val developerOutput: String = "",
@@ -612,7 +622,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun confirmAiSend() {
         val pending = _state.value.aiConsent ?: return
         val settings = _state.value.settings
-        _state.update { it.copy(aiConsent = null, aiLoading = true, aiResponse = "") }
+        val questionMessage = AiChatMessage(role = AiChatRole.USER, text = pending.question)
+        val replyMessage = AiChatMessage(role = AiChatRole.ASSISTANT, text = "Thinking…", pending = true)
+        _state.update {
+            it.copy(
+                aiConsent = null,
+                aiLoading = true,
+                aiResponse = "",
+                aiChat = it.aiChat + questionMessage + replyMessage,
+            )
+        }
         viewModelScope.launch {
             aiAssistant.askAboutPage(
                 settings.aiEndpoint,
@@ -622,15 +641,68 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 pending.pageUrl,
                 pending.pageText,
                 pending.question,
-            ).onSuccess { answer -> _state.update { it.copy(aiLoading = false, aiResponse = answer) } }
-                .onFailure { error ->
-                    _state.update { it.copy(aiLoading = false) }
-                    message(error.message ?: "AI request failed")
+            ).onSuccess { answer ->
+                _state.update { state ->
+                    state.copy(
+                        aiLoading = false,
+                        aiResponse = answer,
+                        aiChat = state.aiChat.map {
+                            if (it.id == replyMessage.id) it.copy(text = answer, pending = false) else it
+                        },
+                    )
                 }
+            }.onFailure { error ->
+                val reason = error.message ?: "AI request failed"
+                _state.update { state ->
+                    state.copy(
+                        aiLoading = false,
+                        aiChat = state.aiChat.map {
+                            if (it.id == replyMessage.id) it.copy(text = reason, pending = false) else it
+                        },
+                    )
+                }
+                message(reason)
+            }
         }
     }
 
-    fun clearAiResponse() = _state.update { it.copy(aiResponse = "") }
+    fun clearAiResponse() = _state.update { it.copy(aiResponse = "", aiChat = emptyList(), aiConsent = null) }
+
+    fun exportAiChat() {
+        val chat = _state.value.aiChat
+        if (chat.isEmpty()) return message("Ask a question first")
+        val transcript = buildString {
+            appendLine("# Nebula AI conversation")
+            appendLine()
+            appendLine("Page: ${_state.value.currentTitle}")
+            appendLine(_state.value.currentUrl)
+            appendLine()
+            chat.forEach { message ->
+                append("**").append(if (message.role == AiChatRole.USER) "You" else "Nebula").append(":** ")
+                appendLine(message.text)
+                appendLine()
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val name = PageTools.savePageText(
+                getApplication(),
+                "Nebula AI chat ${_state.value.currentTitle}",
+                _state.value.currentUrl,
+                transcript,
+            )
+            message(if (name != null) "Chat saved: Download/Nebula/$name" else "Could not save the chat")
+        }
+    }
+
+    fun exportAgentReport() {
+        val report = _state.value.agentReport
+        if (report.isBlank()) return message("Run a research task first")
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { ReportExporter.exportText(getApplication(), "Nebula safe agent", report) }
+                .onSuccess { name -> message("Report saved: Download/Nebula/$name") }
+                .onFailure { message(it.message ?: "Could not save the report") }
+        }
+    }
 
     fun clearBrowsingData() {
         viewModelScope.launch {
