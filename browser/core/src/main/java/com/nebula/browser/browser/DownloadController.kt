@@ -33,6 +33,7 @@ class DownloadController(context: Context, private val database: NebulaDatabase)
         mimeType: String?,
         userAgent: String?,
         wifiOnly: Boolean,
+        notificationsEnabled: Boolean = true,
     ): Result<Long> = withContext(Dispatchers.IO) {
         runCatching {
             require(url.startsWith("https://") || url.startsWith("http://")) { "Only HTTP(S) downloads are supported" }
@@ -48,6 +49,11 @@ class DownloadController(context: Context, private val database: NebulaDatabase)
             userAgent?.let { request.addRequestHeader("User-Agent", it) }
             val id = manager.enqueue(request)
             dao.save(DownloadItem(id = id, url = url, fileName = safeName, mimeType = mimeType).toEntity())
+            if (notificationsEnabled) {
+                runCatching {
+                    androidx.core.content.ContextCompat.startForegroundService(appContext, Intent(appContext, DownloadProgressService::class.java).setAction(DownloadProgressService.ACTION_START))
+                }
+            }
             id
         }
     }
@@ -70,7 +76,12 @@ class DownloadController(context: Context, private val database: NebulaDatabase)
                     status = status.name,
                     bytesDownloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)),
                     totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)),
-                    error = if (status == DownloadStatus.FAILED) "Download error (code $reason)" else null,
+                    error = when {
+                        status == DownloadStatus.FAILED -> "Download error (code $reason)"
+                        status == DownloadStatus.PAUSED && reason == DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for network — resumes automatically"
+                        status == DownloadStatus.PAUSED -> "Paused by Android (code $reason)"
+                        else -> null
+                    },
                 ))
             }
         }
@@ -86,9 +97,9 @@ class DownloadController(context: Context, private val database: NebulaDatabase)
         dao.deleteById(id)
     }
 
-    suspend fun retry(item: DownloadItem, wifiOnly: Boolean): Result<Long> {
+    suspend fun retry(item: DownloadItem, wifiOnly: Boolean, notificationsEnabled: Boolean = true): Result<Long> {
         remove(item.id)
-        return enqueue(item.url, item.fileName, item.mimeType, null, wifiOnly)
+        return enqueue(item.url, item.fileName, item.mimeType, null, wifiOnly, notificationsEnabled)
     }
 
     suspend fun openIntent(id: Long): Intent? = fileIntent(id, Intent.ACTION_VIEW)

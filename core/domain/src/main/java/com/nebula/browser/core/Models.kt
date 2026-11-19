@@ -105,6 +105,16 @@ data class BrowserSettings(
     val aiTemperature: Float = 0.3f,
     val developerMode: Boolean = false,
     val shortcuts: List<HomeShortcut> = DefaultHomeShortcuts.all,
+    val immersiveMode: Boolean = false,
+    val autoHideToolbar: Boolean = true,
+    val edgeMenuEnabled: Boolean = false,
+    val edgeMenuSide: String = "left",
+    val threeFingerMenu: Boolean = true,
+    val liquidEffects: Boolean = true,
+    val homeShowFrequent: Boolean = true,
+    val homeShowTips: Boolean = true,
+    val backgroundStyle: String = "nebula",
+    val downloadNotifications: Boolean = true,
 )
 
 data class ExtensionReport(
@@ -158,3 +168,21 @@ object DefaultHomeShortcuts {
         HomeShortcut("facebook", "Facebook", "https://facebook.com", "f", 0xFF1877F2),
     )
 }
+
+
+data class SearchQuery(
+    val query: String,
+    val count: Int,
+    val lastSearchedAt: Long,
+)
+
+data class UserScript(
+    val id: String,
+    val name: String,
+    val version: String,
+    val code: String,
+    val matches: List<String>,
+    val grants: List<String>,
+    val enabled: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+)

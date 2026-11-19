@@ -4,6 +4,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -48,6 +55,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.History
@@ -87,11 +95,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -234,6 +245,23 @@ private fun NebulaMark(modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun BrandIcon(id: String, fallback: String, color: Color) {
+    val resource = when (id) {
+        "google" -> com.nebula.browser.R.drawable.brand_google
+        "youtube" -> com.nebula.browser.R.drawable.brand_youtube
+        "wikipedia" -> com.nebula.browser.R.drawable.brand_wikipedia
+        "github" -> com.nebula.browser.R.drawable.brand_github
+        "gmail" -> com.nebula.browser.R.drawable.brand_gmail
+        "drive" -> com.nebula.browser.R.drawable.brand_googledrive
+        "facebook" -> com.nebula.browser.R.drawable.brand_facebook
+        "duckduckgo" -> com.nebula.browser.R.drawable.brand_duckduckgo
+        else -> null
+    }
+    if (resource != null) Image(painterResource(resource), null, modifier = Modifier.size(38.dp))
+    else Text(fallback.take(2), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = color)
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomePage(
@@ -247,11 +275,13 @@ fun HomePage(
     onAddShortcut: (String, String) -> Unit,
     onRemoveShortcut: (String) -> Unit,
     onMoveShortcut: (String, Int) -> Unit,
+    onDeleteSearch: (String) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var addDialog by remember { mutableStateOf(false) }
     var editId by remember { mutableStateOf<String?>(null) }
     var tipVisible by remember { mutableStateOf(true) }
+    var searchFocused by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val iconSize = when {
             maxWidth <= 360.dp -> 64.dp
@@ -278,7 +308,7 @@ fun HomePage(
             }
             Spacer(Modifier.height(22.dp))
             OutlinedTextField(
-                value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth().height(78.dp),
+                value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth().height(78.dp).onFocusChanged { searchFocused = it.isFocused },
                 placeholder = { Text("Search or enter address…", fontSize = 16.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(24.dp), tint = NebulaPurple) },
                 trailingIcon = {
@@ -301,6 +331,21 @@ fun HomePage(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { if (query.isNotBlank()) onNavigate(query) }),
             )
+            if (searchFocused) {
+                val suggestions = state.recentSearches.filter { query.isBlank() || it.query.contains(query, true) }.sortedWith(compareByDescending<com.nebula.browser.core.SearchQuery> { it.count }.thenByDescending { it.lastSearchedAt }).take(5)
+                if (suggestions.isNotEmpty()) GlassCard(Modifier.fillMaxWidth().padding(top = 6.dp), radius = 18.dp) {
+                    suggestions.forEach { suggestion ->
+                        ListItem(
+                            headlineContent = { Text(suggestion.query, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            supportingContent = { Text("${suggestion.count} searches") },
+                            leadingContent = { Icon(Icons.Default.History, null, tint = NebulaPurple) },
+                            trailingContent = { IconButton(onClick = { onDeleteSearch(suggestion.query) }) { Icon(Icons.Default.Close, "Remove suggestion") } },
+                            modifier = Modifier.clickable { query = suggestion.query; searchFocused = false; onNavigate(suggestion.query) },
+                            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 GlassCard(Modifier.weight(1f).height(46.dp), radius = 16.dp, onClick = { onNavigate("10 km to mi") }) {
@@ -311,6 +356,23 @@ fun HomePage(
                 GlassCard(Modifier.weight(1f).height(46.dp), radius = 16.dp, onClick = onExtensions) {
                     Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                         Icon(Icons.Default.Extension, null, tint = NebulaCyan); Spacer(Modifier.width(7.dp)); Text("Extension Lab", fontSize = 13.sp, maxLines = 1)
+                    }
+                }
+            }
+            if (state.settings.homeShowFrequent && state.history.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                SectionTitle("Your orbit", "Most visited websites, ranked from your real history")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(state.history.sortedByDescending { it.visitCount }.distinctBy { it.url.substringAfter("://").substringBefore('/') }.take(5), key = { "frequent_${it.id}" }) { entry ->
+                        GlassCard(Modifier.width(156.dp).height(72.dp), radius = 18.dp, onClick = { onNavigate(entry.url) }) {
+                            Row(Modifier.fillMaxSize().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(38.dp).background(NebulaViolet, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
+                                    Text(entry.title.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(Modifier.width(9.dp))
+                                Column { Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text("${entry.visitCount} visits", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
                     }
                 }
             }
@@ -331,7 +393,7 @@ fun HomePage(
                                 onClick = { onNavigate(shortcut.url) }, onLongClick = { editId = shortcut.id },
                             ), contentAlignment = Alignment.Center,
                         ) {
-                            Text(shortcut.symbol.take(2), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Color(shortcut.color))
+                            BrandIcon(shortcut.id, shortcut.symbol, Color(shortcut.color))
                         }
                         Text(shortcut.title, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
                     }
@@ -346,7 +408,7 @@ fun HomePage(
                     }
                 }
             }
-            if (tipVisible) GlassCard(Modifier.fillMaxWidth(), radius = 18.dp) {
+            if (tipVisible && state.settings.homeShowTips) GlassCard(Modifier.fillMaxWidth(), radius = 18.dp) {
                 Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Lightbulb, null, tint = NebulaPurple)
                     Text("Try ‘gh android browser’, ‘45*12’, or ‘10 kg to lb’. Long-press a shortcut to arrange it.", modifier = Modifier.weight(1f).padding(horizontal = 10.dp), fontSize = 12.sp)
@@ -431,14 +493,23 @@ fun TabSwitcher(
     onMove: (String, String) -> Unit,
     onDuplicate: (String) -> Unit,
     onCloseAll: () -> Unit,
+    onGroupTogether: (String, String) -> Unit,
     onForward: () -> Unit,
     onReload: () -> Unit,
 ) {
     var actionTab by remember { mutableStateOf<BrowserTab?>(null) }
     var selectedGroup by remember { mutableStateOf<String?>(null) }
+    var tabQuery by remember { mutableStateOf("") }
+    var draggedId by remember { mutableStateOf<String?>(null) }
+    var dropTargetId by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    val cardBounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
     val workspaceTabs = state.tabs.filter { it.workspaceId == state.activeWorkspaceId }
     val groups = workspaceTabs.mapNotNull { it.groupName }.distinct()
-    val tabs = workspaceTabs.filter { selectedGroup == null || it.groupName == selectedGroup }
+    val tabs = workspaceTabs.filter {
+        (selectedGroup == null || it.groupName == selectedGroup) &&
+            (tabQuery.isBlank() || it.title.contains(tabQuery, true) || it.url.contains(tabQuery, true) || it.groupName?.contains(tabQuery, true) == true)
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Row(Modifier.height(60.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = if (state.canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
@@ -465,8 +536,14 @@ fun TabSwitcher(
             item { FilterChip(selected = selectedGroup == null, onClick = { selectedGroup = null }, label = { Text("All groups") }) }
             items(groups) { group -> FilterChip(selected = selectedGroup == group, onClick = { selectedGroup = group }, label = { Text(group) }) }
         }
+        OutlinedTextField(
+            tabQuery, { tabQuery = it }, Modifier.fillMaxWidth().padding(vertical = 4.dp).height(50.dp),
+            placeholder = { Text("Search open tabs, URLs and groups", fontSize = 12.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp)) }, singleLine = true,
+            shape = RoundedCornerShape(18.dp), textStyle = MaterialTheme.typography.bodySmall,
+        )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("${tabs.size} tabs · long-press for group actions", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            Text("${tabs.size} tabs · drag the handle onto another tab to group", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             TextButton(onClick = onCloseAll) { Text("Close unpinned", fontSize = 12.sp) }
         }
         LazyVerticalGrid(
@@ -475,8 +552,14 @@ fun TabSwitcher(
         ) {
             items(tabs, key = BrowserTab::id) { tab ->
                 GlassCard(
-                    Modifier.fillMaxWidth().height(242.dp).combinedClickable(onClick = { onSelect(tab.id) }, onLongClick = { actionTab = tab }),
-                    active = tab.id == state.activeTabId, radius = 20.dp,
+                    Modifier.fillMaxWidth().height(242.dp)
+                        .onGloballyPositioned { cardBounds[tab.id] = it.boundsInRoot() }
+                        .graphicsLayer {
+                            if (draggedId == tab.id) { translationX = dragOffset.x; translationY = dragOffset.y; alpha = .88f }
+                        }
+                        .zIndex(if (draggedId == tab.id) 2f else 0f)
+                        .combinedClickable(onClick = { onSelect(tab.id) }, onLongClick = { actionTab = tab }),
+                    active = tab.id == state.activeTabId || dropTargetId == tab.id, radius = 20.dp,
                 ) {
                     Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(7.dp).background(if (tab.isPrivate) NebulaPurple else NebulaCyan, RoundedCornerShape(50)))
@@ -497,6 +580,26 @@ fun TabSwitcher(
                     }
                     Row(Modifier.fillMaxWidth().padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { onPin(tab.id) }) { Icon(Icons.Default.PushPin, if (tab.isPinned) "Unpin" else "Pin", tint = if (tab.isPinned) NebulaPurple else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Icon(
+                            Icons.Default.DragIndicator, "Drag to group with another tab",
+                            modifier = Modifier.size(24.dp).pointerInput(tab.id) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { draggedId = tab.id; dragOffset = Offset.Zero; dropTargetId = null },
+                                    onDrag = { change, amount ->
+                                        change.consume(); dragOffset += amount
+                                        val origin = cardBounds[tab.id]?.center ?: return@detectDragGesturesAfterLongPress
+                                        val pointer = origin + dragOffset
+                                        dropTargetId = cardBounds.entries.firstOrNull { it.key != tab.id && it.value.contains(pointer) }?.key
+                                    },
+                                    onDragEnd = {
+                                        val target = dropTargetId
+                                        if (target != null) onGroupTogether(tab.id, target)
+                                        draggedId = null; dropTargetId = null; dragOffset = Offset.Zero
+                                    },
+                                    onDragCancel = { draggedId = null; dropTargetId = null; dragOffset = Offset.Zero },
+                                )
+                            },
+                        )
                         TextButton(onClick = { onCloseOthers(tab.id) }, modifier = Modifier.weight(1f)) { Text("Close others", fontSize = 11.sp) }
                     }
                 }
@@ -525,6 +628,25 @@ fun TabSwitcher(
                 }
             },
         )
+    }
+}
+
+@Composable
+fun TabGroupDock(state: BrowserUiState, onSelect: (String) -> Unit, onNewInGroup: () -> Unit) {
+    val active = state.activeTab ?: return
+    val group = active.groupName ?: return
+    var minimized by remember(group) { mutableStateOf(false) }
+    val tabs = state.tabs.filter { it.workspaceId == active.workspaceId && it.groupName == group }
+    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 8.dp), radius = 18.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp)) {
+            TextButton(onClick = { minimized = !minimized }) { Text(if (minimized) "$group (${tabs.size})" else "$group · Minimize", maxLines = 1, fontSize = 12.sp) }
+            if (!minimized) LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                items(tabs, key = { "dock_${it.id}" }) { tab ->
+                    FilterChip(selected = tab.id == active.id, onClick = { onSelect(tab.id) }, label = { Text(tab.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp) })
+                }
+            } else Spacer(Modifier.weight(1f))
+            IconButton(onClick = onNewInGroup, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Add, "New tab in group", modifier = Modifier.size(18.dp)) }
+        }
     }
 }
 
@@ -561,5 +683,33 @@ fun QrCodeDialog(content: String, onDismiss: () -> Unit) {
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
+}
+
+@Composable
+fun BookmarkEditorDialog(
+    title: String,
+    url: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String, String, String) -> Unit,
+) {
+    var name by remember(url) { mutableStateOf(title) }
+    var folder by remember { mutableStateOf("Bookmarks") }
+    var tags by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Save to your library") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Bookmark name") }, singleLine = true)
+                OutlinedTextField(url, {}, label = { Text("Website") }, readOnly = true, singleLine = true)
+                OutlinedTextField(folder, { folder = it }, label = { Text("Folder (new or existing)") }, singleLine = true)
+                OutlinedTextField(tags, { tags = it }, label = { Text("Tags, comma separated") }, singleLine = true)
+                OutlinedTextField(notes, { notes = it }, label = { Text("Private note") }, minLines = 2)
+            }
+        },
+        confirmButton = { Button(onClick = { onSave(name, url, folder, tags, notes); onDismiss() }, enabled = name.isNotBlank() && url.isNotBlank()) { Text("Save bookmark") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

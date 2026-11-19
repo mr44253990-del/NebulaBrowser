@@ -24,6 +24,10 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.UserAgentMetadata
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
+import com.nebula.browser.core.UserScript
 import android.widget.FrameLayout
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.flow.Flow
@@ -39,9 +43,10 @@ data class EnginePrivacyConfig(
 class WebViewEngine(
     private val context: Context,
     private val privacyConfig: () -> EnginePrivacyConfig,
+    private val scriptProvider: () -> List<UserScript> = { emptyList() },
 ) : BrowserEngine {
     override fun createSession(tabId: String, privateMode: Boolean): BrowserSession =
-        WebViewSession(context, tabId, privateMode, privacyConfig)
+        WebViewSession(context, tabId, privateMode, privacyConfig, scriptProvider)
 
     override fun clearCache() = Unit // Each session owns and clears its WebView cache.
 }
@@ -52,12 +57,24 @@ private class WebViewSession(
     override val tabId: String,
     private val privateMode: Boolean,
     private val privacyConfig: () -> EnginePrivacyConfig,
+    private val scriptProvider: () -> List<UserScript>,
 ) : BrowserSession {
     private val mutableEvents = MutableSharedFlow<EngineEvent>(extraBufferCapacity = 64)
     override val events: Flow<EngineEvent> = mutableEvents
     private var destroyed = false
+    private var desktopMode = false
+    private var previousScrollY = 0
 
-    private val webView = WebView(context).apply {
+    private val webView = object : WebView(context) {
+        override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
+            super.onScrollChanged(l, t, oldl, oldt)
+            val delta = t - previousScrollY
+            if (kotlin.math.abs(delta) > 24) {
+                mutableEvents.tryEmit(EngineEvent.ScrollChanged(tabId, t, delta))
+                previousScrollY = t
+            }
+        }
+    }.apply {
         layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         settings.apply {
             javaScriptEnabled = privacyConfig().javaScriptEnabled
@@ -125,9 +142,39 @@ private class WebViewSession(
 
     override fun setDesktopMode(enabled: Boolean) {
         if (destroyed) return
-        webView.settings.userAgentString = if (enabled) DESKTOP_USER_AGENT else null
-        webView.settings.useWideViewPort = true
-        webView.settings.loadWithOverviewMode = enabled
+        desktopMode = enabled
+        webView.settings.apply {
+            userAgentString = if (enabled) DESKTOP_USER_AGENT else WebSettings.getDefaultUserAgent(context).replace("; wv", "")
+            useWideViewPort = true
+            loadWithOverviewMode = enabled
+            setSupportZoom(true)
+            builtInZoomControls = true
+            textZoom = 100
+            layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
+        }
+        webView.setInitialScale(0)
+        updateUserAgentMetadata(enabled)
+        applyViewportMode()
+    }
+
+    private fun updateUserAgentMetadata(enabled: Boolean) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) return
+        val builder = UserAgentMetadata.Builder()
+            .setMobile(!enabled)
+            .setPlatform(if (enabled) "Windows" else "Android")
+            .setPlatformVersion(if (enabled) "10.0.0" else android.os.Build.VERSION.RELEASE)
+            .setModel(if (enabled) "" else android.os.Build.MODEL)
+            .setArchitecture(if (enabled) "x86" else "")
+        if (enabled) builder.setBitness(64).setWow64(true)
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA_FORM_FACTORS)) {
+            builder.setFormFactors(listOf(if (enabled) UserAgentMetadata.FORM_FACTOR_DESKTOP else UserAgentMetadata.FORM_FACTOR_MOBILE))
+        }
+        WebSettingsCompat.setUserAgentMetadata(webView.settings, builder.build())
+    }
+
+    private fun applyViewportMode() {
+        val width = if (desktopMode) "1280" else "device-width"
+        webView.evaluateJavascript("(function(){var m=document.querySelector('meta[name=viewport]');if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}m.setAttribute('content','width=$width, initial-scale=1.0, maximum-scale=5.0');})()", null)
     }
 
     override fun setJavaScriptEnabled(enabled: Boolean) {
@@ -215,6 +262,24 @@ private class WebViewSession(
             mutableEvents.tryEmit(EngineEvent.LoadingChanged(tabId, false))
             emitNavigationState()
             if (privateMode) view.clearHistory()
+            applyViewportMode()
+            injectUserScripts(url)
+        }
+
+        private fun injectUserScripts(url: String) {
+            scriptProvider().filter { it.enabled && it.code.length <= 1_000_000 && it.grants.all { grant -> grant == "none" } }
+                .filter { script -> script.matches.any { pattern -> matchesPattern(url, pattern) } }
+                .forEach { script ->
+                    val wrapped = "(function(){'use strict';try{${script.code}
+}catch(e){console.error('Nebula userscript ${script.name}: '+e.message);}})();"
+                    webView.evaluateJavascript(wrapped, null)
+                }
+        }
+
+        private fun matchesPattern(url: String, pattern: String): Boolean {
+            if (pattern == "<all_urls>" || pattern == "*") return url.startsWith("http")
+            val regex = pattern.split("*").joinToString(".*") { Regex.escape(it) }
+            return runCatching { Regex(regex, RegexOption.IGNORE_CASE).matches(url) }.getOrDefault(false)
         }
 
         override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {

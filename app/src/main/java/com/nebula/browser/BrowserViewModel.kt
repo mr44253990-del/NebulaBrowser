@@ -25,6 +25,10 @@ import com.nebula.browser.core.NebulaDatabase
 import com.nebula.browser.core.PasswordCredential
 import com.nebula.browser.core.PasswordVault
 import com.nebula.browser.core.SearchEngine
+import com.nebula.browser.core.SearchQuery
+import com.nebula.browser.core.SearchRepository
+import com.nebula.browser.core.UserScript
+import com.nebula.browser.core.UserScriptRepository
 import com.nebula.browser.core.SecretStore
 import com.nebula.browser.core.SettingsRepository
 import com.nebula.browser.core.SmartQueryResolver
@@ -36,7 +40,12 @@ import com.nebula.browser.engine.EnginePrivacyConfig
 import com.nebula.browser.engine.SitePermissionRequest
 import com.nebula.browser.engine.WebViewEngine
 import com.nebula.browser.feature.ai.AiAssistant
+import com.nebula.browser.feature.ai.AgentAction
+import com.nebula.browser.feature.ai.AgentStep
+import com.nebula.browser.feature.ai.AgentStepStatus
+import com.nebula.browser.feature.ai.ReportExporter
 import com.nebula.browser.feature.extensions.ExtensionCompatibilityAnalyzer
+import com.nebula.browser.feature.extensions.UserScriptParser
 import com.nebula.browser.util.bookmarksFromHtml
 import com.nebula.browser.util.bookmarksToHtml
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +58,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import kotlinx.coroutines.withContext
 
 data class PendingAiRequest(
@@ -86,6 +100,15 @@ data class BrowserUiState(
     val developerOutput: String = "",
     val consoleMessages: List<String> = emptyList(),
     val openedFile: DownloadItem? = null,
+    val recentSearches: List<SearchQuery> = emptyList(),
+    val userScripts: List<UserScript> = emptyList(),
+    val toolbarVisible: Boolean = true,
+    val agentPlanning: Boolean = false,
+    val agentRunning: Boolean = false,
+    val agentPlan: List<AgentAction> = emptyList(),
+    val agentSteps: List<AgentStep> = emptyList(),
+    val agentProgress: Float = 0f,
+    val agentReport: String = "",
 ) {
     val activeTab: BrowserTab? get() = tabs.firstOrNull { it.id == activeTabId }
     val isHome: Boolean get() = currentUrl.isBlank()
@@ -96,6 +119,7 @@ sealed interface UiEffect {
     data class Message(val text: String) : UiEffect
     data class OpenExternal(val intent: Intent) : UiEffect
     data class FileChooser(val request: EngineEvent.FileChooserRequested) : UiEffect
+    data object RequestDownloadNotifications : UiEffect
 }
 
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
@@ -103,6 +127,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val bookmarkRepository = BookmarkRepository(database.bookmarks())
     private val historyRepository = HistoryRepository(database.history())
     private val tabRepository = TabRepository(database.tabs())
+    private val searchRepository = SearchRepository(database.searchQueries())
+    private val userScriptRepository = UserScriptRepository(database.userScripts())
     private val settingsRepository = SettingsRepository(application)
     private val secrets = SecretStore(application)
     private val vault = PasswordVault(secrets)
@@ -110,12 +136,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val extensionAnalyzer = ExtensionCompatibilityAnalyzer(application)
     val aiAssistant = AiAssistant(secrets)
 
-    private val engine = WebViewEngine(application) {
+    private val engine = WebViewEngine(context = application, privacyConfig = {
         val settings = _state.value.settings
         EnginePrivacyConfig(settings.adBlockEnabled, settings.blockThirdPartyCookies, settings.javaScriptEnabled)
-    }
+    }, scriptProvider = { _state.value.userScripts })
     private val sessions = mutableMapOf<String, BrowserSession>()
     private val recentlyClosed = mutableListOf<BrowserTab>()
+    private var agentJob: Job? = null
 
     private val _state = MutableStateFlow(BrowserUiState())
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
@@ -130,6 +157,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 WebView.setWebContentsDebuggingEnabled(settings.developerMode)
             }
         }
+        viewModelScope.launch { searchRepository.topSearches.collectLatest { list -> _state.update { it.copy(recentSearches = list) } } }
+        viewModelScope.launch { userScriptRepository.scripts.collectLatest { list -> _state.update { it.copy(userScripts = list) } } }
         viewModelScope.launch { bookmarkRepository.bookmarks.collectLatest { list -> _state.update { it.copy(bookmarks = list) } } }
         viewModelScope.launch { historyRepository.history.collectLatest { list -> _state.update { it.copy(history = list) } } }
         viewModelScope.launch {
@@ -230,6 +259,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             .onSuccess { result ->
                 when (result) {
                     is SmartResult.Navigate -> {
+                        if (!input.trim().startsWith("http", true) && (!input.trim().contains('.') || input.contains(' ') || input.trim().startsWith("view-source:"))) {
+                            viewModelScope.launch(Dispatchers.IO) { searchRepository.record(input) }
+                        }
                         val id = _state.value.activeTabId
                         activeSession()?.loadUrl(result.url)
                         updateTab(id) { it.copy(url = result.url) }
@@ -262,6 +294,21 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun setTabGroup(id: String, group: String?) {
         updateTab(id) { it.copy(groupName = group?.trim()?.take(40)?.ifBlank { null }) }
+    }
+
+    fun groupTabsTogether(sourceId: String, targetId: String) {
+        if (sourceId == targetId) return
+        val target = _state.value.tabs.firstOrNull { it.id == targetId } ?: return
+        val group = target.groupName ?: "Group ${target.title.take(16).ifBlank { "Tabs" }}"
+        updateTab(sourceId) { it.copy(groupName = group, workspaceId = target.workspaceId) }
+        updateTab(targetId) { it.copy(groupName = group) }
+        message("Tabs grouped in $group")
+    }
+
+    fun createTabInActiveGroup() {
+        val group = _state.value.activeTab?.groupName ?: return createTab()
+        createTab()
+        setTabGroup(_state.value.activeTabId, group)
     }
 
     fun moveTabToWorkspace(id: String, workspaceId: String) {
@@ -297,10 +344,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun printPage() = activeSession()?.printPage() ?: Unit
 
-    fun addBookmark(title: String = _state.value.currentTitle, url: String = _state.value.currentUrl, folder: String = "Bookmarks") {
+    fun addBookmark(title: String = _state.value.currentTitle, url: String = _state.value.currentUrl, folder: String = "Bookmarks", tags: String = "", notes: String = "") {
         if (url.isBlank() || _state.value.activeTab?.isPrivate == true) return message("This page cannot be bookmarked")
         viewModelScope.launch {
-            bookmarkRepository.save(Bookmark(title = title.ifBlank { url }, url = url, folder = folder))
+            bookmarkRepository.save(Bookmark(title = title.ifBlank { url }, url = url, folder = folder.ifBlank { "Bookmarks" }, tags = tags, notes = notes))
             message("Bookmark saved")
         }
     }
@@ -331,6 +378,27 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         message("Browsing history cleared")
     }
 
+    fun clearSearchHistory() = viewModelScope.launch { searchRepository.clear(); message("Search suggestions cleared") }
+    fun deleteSearchQuery(query: String) = viewModelScope.launch { searchRepository.delete(query) }
+
+    fun importUserScript(uri: Uri, fileName: String) = viewModelScope.launch(Dispatchers.IO) {
+        runCatching {
+            val code = getApplication<Application>().contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                ?: error("Cannot open userscript")
+            UserScriptParser.parse(code, fileName)
+        }.onSuccess { script ->
+            userScriptRepository.save(script)
+            message(if (script.enabled) "Userscript installed for its declared sites" else "Userscript saved disabled: unsupported GM grants require review")
+        }.onFailure { message(it.message ?: "Invalid userscript") }
+    }
+
+    fun toggleUserScript(script: UserScript) = viewModelScope.launch(Dispatchers.IO) {
+        if (!script.enabled && script.grants.any { it != "none" }) return@launch message("Only @grant none userscripts can run in this version")
+        userScriptRepository.save(script.copy(enabled = !script.enabled))
+    }
+
+    fun deleteUserScript(id: String) = viewModelScope.launch(Dispatchers.IO) { userScriptRepository.delete(id) }
+
     fun updateSettings(transform: (BrowserSettings) -> BrowserSettings) {
         viewModelScope.launch { settingsRepository.update(transform) }
     }
@@ -344,8 +412,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun requestDownload(url: String, fileName: String, mimeType: String? = null) {
+        if (_state.value.settings.downloadNotifications && android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(getApplication(), android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            _effects.tryEmit(UiEffect.RequestDownloadNotifications)
+        }
         viewModelScope.launch {
-            downloadController.enqueue(url, fileName, mimeType, null, _state.value.settings.downloadWifiOnly)
+            downloadController.enqueue(url, fileName, mimeType, null, _state.value.settings.downloadWifiOnly, _state.value.settings.downloadNotifications)
                 .onSuccess { message("Download queued: $fileName") }
                 .onFailure { message(it.message ?: "Download failed") }
         }
@@ -355,7 +427,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun cancelDownload(id: Long) = viewModelScope.launch { downloadController.cancel(id) }
     fun removeDownload(id: Long) = viewModelScope.launch { downloadController.remove(id) }
     fun retryDownload(item: DownloadItem) = viewModelScope.launch {
-        downloadController.retry(item, _state.value.settings.downloadWifiOnly)
+        downloadController.retry(item, _state.value.settings.downloadWifiOnly, _state.value.settings.downloadNotifications)
             .onSuccess { message("Download restarted") }
             .onFailure { message(it.message ?: "Could not retry") }
     }
@@ -486,6 +558,122 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun startAgent(task: String) {
+        if (agentJob?.isActive == true || _state.value.agentPlanning) return message("An agent task is already running")
+        val settings = _state.value.settings
+        if (!settings.aiEnabled) return message("Enable AI and configure your provider first")
+        _state.update { it.copy(agentPlanning = true, agentPlan = emptyList(), agentSteps = emptyList(), agentReport = "") }
+        viewModelScope.launch {
+            aiAssistant.createBrowserPlan(settings.aiEndpoint, settings.aiModel, settings.aiTemperature, task)
+                .onSuccess { plan ->
+                    if (plan.isEmpty()) {
+                        _state.update { it.copy(agentPlanning = false) }; message("The planner returned no safe steps")
+                    } else _state.update { it.copy(agentPlanning = false, agentPlan = plan) }
+                }.onFailure { error ->
+                    _state.update { it.copy(agentPlanning = false) }
+                    message(error.message ?: "Agent planning failed")
+                }
+        }
+    }
+
+    fun dismissAgentPlan() = _state.update { it.copy(agentPlan = emptyList()) }
+
+    fun confirmAgentPlan(task: String) {
+        val plan = _state.value.agentPlan
+        if (plan.isEmpty() || _state.value.agentRunning) return
+        val steps = plan.mapIndexed { index, action -> AgentStep("step_$index", action.title) }
+        _state.update { it.copy(agentPlan = emptyList(), agentRunning = true, agentSteps = steps, agentProgress = 0f, agentReport = "") }
+        agentJob = viewModelScope.launch { executeAgent(task, plan, steps) }
+    }
+
+    fun cancelAgent() {
+        agentJob?.cancel()
+        _state.update { state -> state.copy(agentRunning = false, agentSteps = state.agentSteps.map {
+            if (it.status == AgentStepStatus.RUNNING) it.copy(status = AgentStepStatus.CANCELLED, detail = "Cancelled by user") else it
+        }) }
+    }
+
+    private suspend fun executeAgent(task: String, plan: List<AgentAction>, steps: List<AgentStep>) {
+        val report = StringBuilder("Nebula safe browser agent
+Created: ${java.util.Date()}
+Task: $task
+
+")
+        val sourceTabs = mutableListOf<String>()
+        try {
+            plan.forEachIndexed { index, action ->
+                val step = steps[index]
+                updateAgentStep(step.id, AgentStepStatus.RUNNING, "Starting")
+                when (action.action) {
+                    "open_urls" -> {
+                        action.urls.take(12).forEachIndexed { urlIndex, url ->
+                            updateAgentStep(step.id, AgentStepStatus.RUNNING, "Opening ${urlIndex + 1}/${action.urls.size}: $url")
+                            createTab(url = url)
+                            sourceTabs += _state.value.activeTabId
+                            var waitCycles = 0
+                            while (_state.value.loading && waitCycles++ < 16) delay(500)
+                            delay(1_200)
+                        }
+                    }
+                    "go_back" -> { goBack(); delay(1_500); report.append("Went back in browser history.
+") }
+                    "collect_pages" -> {
+                        val targets = if (sourceTabs.isEmpty()) listOf(_state.value.activeTabId) else sourceTabs.toList()
+                        targets.forEachIndexed { tabIndex, tabId ->
+                            selectTab(tabId)
+                            updateAgentStep(step.id, AgentStepStatus.RUNNING, "Collecting ${tabIndex + 1}/${targets.size}")
+                            val text = awaitActivePageText()
+                            val tab = _state.value.tabs.firstOrNull { it.id == tabId }
+                            report.append("
+=== SOURCE ${tabIndex + 1}: ${tab?.title.orEmpty()} ===
+${tab?.url.orEmpty()}
+")
+                            report.append(text.orEmpty().ifBlank { "[No readable text was available]" }.take(10_000)).append('
+')
+                            updateAgentStep(step.id, AgentStepStatus.RUNNING, "Collected ${tabIndex + 1}/${targets.size}")
+                        }
+                    }
+                    "export_text", "export_pdf" -> {
+                        updateAgentStep(step.id, AgentStepStatus.RUNNING, "Writing to Download/Nebula")
+                        val name = withContext(Dispatchers.IO) {
+                            if (action.action == "export_pdf") ReportExporter.exportPdf(getApplication(), task, report.toString())
+                            else ReportExporter.exportText(getApplication(), task, report.toString())
+                        }
+                        report.append("
+Exported: $name
+")
+                        message("Report saved: Download/Nebula/$name")
+                    }
+                }
+                updateAgentStep(step.id, AgentStepStatus.COMPLETE, "Completed")
+                _state.update { it.copy(agentProgress = (index + 1).toFloat() / plan.size, agentReport = report.toString()) }
+            }
+            _state.update { it.copy(agentRunning = false, agentProgress = 1f, agentReport = report.toString()) }
+            message("Agent task completed")
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            val running = _state.value.agentSteps.firstOrNull { it.status == AgentStepStatus.RUNNING }
+            running?.let { updateAgentStep(it.id, AgentStepStatus.FAILED, error.message ?: "Failed") }
+            _state.update { it.copy(agentRunning = false, agentReport = report.toString()) }
+            message(error.message ?: "Agent task failed")
+        }
+    }
+
+    private fun updateAgentStep(id: String, status: AgentStepStatus, detail: String) {
+        _state.update { state -> state.copy(agentSteps = state.agentSteps.map { if (it.id == id) it.copy(status = status, detail = detail) else it }) }
+    }
+
+    private suspend fun awaitActivePageText(): String? = withTimeoutOrNull(10_000) {
+        suspendCancellableCoroutine { continuation ->
+            activeSession()?.evaluateJavaScript("(function(){return document.body ? document.body.innerText.slice(0,12000) : '';})()") { text ->
+                if (continuation.isActive) continuation.resume(text)
+            } ?: continuation.resume(null)
+        }
+    }
+
+    fun showToolbar() = _state.update { it.copy(toolbarVisible = true) }
+
     fun message(text: String) { _effects.tryEmit(UiEffect.Message(text)) }
 
     private fun observeSession(session: BrowserSession) {
@@ -513,7 +701,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     }
                     is EngineEvent.PageStarted -> {
                         updateTab(event.tabId) { it.copy(url = event.url) }
-                        ifActive(event.tabId) { copy(currentUrl = event.url, loading = true) }
+                        ifActive(event.tabId) { copy(currentUrl = event.url, loading = true, toolbarVisible = true) }
                     }
                     is EngineEvent.Error -> {
                         ifActive(event.tabId) { copy(loading = false) }
@@ -524,6 +712,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     is EngineEvent.SitePermissionRequested -> _state.update { it.copy(pendingPermission = event.request) }
                     is EngineEvent.ConsoleMessage -> if (_state.value.settings.developerMode) _state.update {
                         it.copy(consoleMessages = (it.consoleMessages + "${event.source}:${event.line} — ${event.message}").takeLast(100))
+                    }
+                    is EngineEvent.ScrollChanged -> if (_state.value.settings.autoHideToolbar && event.tabId == _state.value.activeTabId) _state.update {
+                        it.copy(toolbarVisible = event.scrollY < 100 || event.deltaY < 0)
                     }
                     is EngineEvent.FileChooserRequested -> _effects.tryEmit(UiEffect.FileChooser(event))
                     is EngineEvent.ExternalRequest -> {
@@ -550,6 +741,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         is EngineEvent.BlockedRequest -> event.tabId
         is EngineEvent.SitePermissionRequested -> event.request.tabId
         is EngineEvent.ConsoleMessage -> event.tabId
+        is EngineEvent.ScrollChanged -> event.tabId
     }
 
     private fun extractPageText(callback: (String?) -> Unit) {

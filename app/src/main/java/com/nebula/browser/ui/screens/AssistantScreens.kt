@@ -89,46 +89,104 @@ fun ReaderScreen(title: String, text: String, onBack: () -> Unit, onAskAi: () ->
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiAssistantSheet(
-    loading: Boolean,
-    response: String,
-    enabled: Boolean,
+    state: com.nebula.browser.BrowserUiState,
     onDismiss: () -> Unit,
     onAsk: (String) -> Unit,
     onClear: () -> Unit,
     onOpenSettings: () -> Unit,
+    onStartAgent: (String) -> Unit,
+    onConfirmAgent: (String) -> Unit,
+    onDismissAgentPlan: () -> Unit,
+    onCancelAgent: () -> Unit,
 ) {
     var question by remember { mutableStateOf("") }
+    var task by remember { mutableStateOf("") }
+    var mode by remember { mutableStateOf("Assistant") }
     val context = LocalContext.current
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Nebula page intelligence", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Nothing is uploaded when you open this panel. You will see exactly when page text is about to be sent.")
-            if (!enabled) {
-                Text("AI is disabled. Configure an OpenAI-compatible provider in Settings.")
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("NEBULA INTELLIGENCE", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+            androidx.compose.material3.TabRow(selectedTabIndex = if (mode == "Assistant") 0 else 1, containerColor = Color.Transparent) {
+                androidx.compose.material3.Tab(selected = mode == "Assistant", onClick = { mode = "Assistant" }, text = { Text("Page assistant") })
+                androidx.compose.material3.Tab(selected = mode == "Agent", onClick = { mode = "Agent" }, text = { Text("Research agent") })
+            }
+            if (!state.settings.aiEnabled) {
+                Text("AI is disabled. Configure an OpenAI-compatible provider in Settings. Nothing is uploaded by opening this panel.")
                 Button(onClick = onOpenSettings) { Text("Open AI settings") }
-            } else {
+            } else if (mode == "Assistant") {
+                Text("Ask only about the current page. A separate consent dialog appears before page content is sent.")
                 OutlinedTextField(question, { question = it }, Modifier.fillMaxWidth(), label = { Text("Ask about this page") }, minLines = 2)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AssistChip(onClick = { onAsk("Summarize with concise bullets and caveats.") }, label = { Text("Summarize") }, enabled = !loading)
-                    AssistChip(onClick = { onAsk("Explain this page in simple language, preserving important nuances.") }, label = { Text("Explain") }, enabled = !loading)
-                    AssistChip(onClick = { onAsk("Extract key facts, dates, numbers and unresolved questions.") }, label = { Text("Key facts") }, enabled = !loading)
+                    AssistChip(onClick = { onAsk("Summarize with concise bullets and caveats.") }, label = { Text("Summarize") }, enabled = !state.aiLoading)
+                    AssistChip(onClick = { onAsk("Explain this page in simple language, preserving important nuances.") }, label = { Text("Explain") }, enabled = !state.aiLoading)
+                    AssistChip(onClick = { onAsk("Extract key facts, dates, numbers and unresolved questions.") }, label = { Text("Key facts") }, enabled = !state.aiLoading)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AssistChip(onClick = { onAsk("Translate the main content of this page into natural Bengali.") }, label = { Text("বাংলা") }, enabled = !loading)
-                    AssistChip(onClick = { onAsk("Create five thoughtful research questions and suggest search queries to verify this page.") }, label = { Text("Research") }, enabled = !loading)
+                    AssistChip(onClick = { onAsk("Translate the main content of this page into natural Bengali.") }, label = { Text("বাংলা") }, enabled = !state.aiLoading)
+                    AssistChip(onClick = { onAsk("Create five thoughtful research questions and suggest search queries to verify this page.") }, label = { Text("Research") }, enabled = !state.aiLoading)
                 }
-                Button(onClick = { onAsk(question.ifBlank { "Summarize the key points of this page." }) }, enabled = !loading) { Text("Review & send") }
-                if (loading) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(); Text("  Waiting for your provider…") }
-                if (response.isNotBlank()) {
+                Button(onClick = { onAsk(question.ifBlank { "Summarize the key points of this page." }) }, enabled = !state.aiLoading) { Text("Review & send") }
+                if (state.aiLoading) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(); Text("  Waiting for your provider…") }
+                if (state.aiResponse.isNotBlank()) {
                     HorizontalDivider()
-                    SelectionContainer { Text(response) }
+                    SelectionContainer { Text(state.aiResponse) }
                     Row {
                         TextButton(onClick = {
                             val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Nebula AI response", response))
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Nebula AI response", state.aiResponse))
                         }) { Text("Copy") }
                         TextButton(onClick = onClear) { Text("Clear response") }
                     }
+                }
+            } else {
+                Text("Safe browser automation", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Open up to 12 HTTPS sources, go back, collect readable text, and export TXT/PDF. Every plan requires approval. No forms, payments, credentials, arbitrary code, or hidden actions.")
+                OutlinedTextField(
+                    task, { task = it }, Modifier.fillMaxWidth(), minLines = 3,
+                    label = { Text("Research task") },
+                    placeholder = { Text("Example: Research Android WebView desktop mode from official sources and export a PDF") },
+                )
+                Button(onClick = { onStartAgent(task) }, enabled = task.length >= 3 && !state.agentPlanning && !state.agentRunning) { Text(if (state.agentPlanning) "Planning…" else "Create safe plan") }
+                if (state.agentPlanning) CircularProgressIndicator()
+                if (state.agentPlan.isNotEmpty()) com.nebula.browser.ui.components.GlassCard(Modifier.fillMaxWidth(), active = true) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text("Review this plan before anything opens", fontWeight = FontWeight.Bold)
+                        state.agentPlan.forEachIndexed { index, action ->
+                            Text("${index + 1}. ${action.title} · ${action.action}")
+                            if (action.urls.isNotEmpty()) action.urls.forEach { Text("  $it", style = MaterialTheme.typography.bodySmall) }
+                        }
+                        Text("Collected text stays on this device for export. Only the task above was sent to the AI planner.")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { onConfirmAgent(task) }) { Text("Approve & run") }
+                            OutlinedButton(onClick = onDismissAgentPlan) { Text("Reject") }
+                        }
+                    }
+                }
+                if (state.agentSteps.isNotEmpty()) {
+                    androidx.compose.material3.LinearProgressIndicator(progress = { state.agentProgress }, modifier = Modifier.fillMaxWidth())
+                    state.agentSteps.forEach { step ->
+                        com.nebula.browser.ui.components.GlassCard(Modifier.fillMaxWidth(), active = step.status == com.nebula.browser.feature.ai.AgentStepStatus.RUNNING) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    when (step.status) {
+                                        com.nebula.browser.feature.ai.AgentStepStatus.COMPLETE -> Icons.Default.ArrowForward
+                                        com.nebula.browser.feature.ai.AgentStepStatus.RUNNING -> Icons.Default.Refresh
+                                        else -> Icons.Default.SmartToy
+                                    }, null, tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                    Text(step.title, fontWeight = FontWeight.SemiBold)
+                                    Text(step.detail, style = MaterialTheme.typography.bodySmall)
+                                }
+                                Text(step.status.name, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+                if (state.agentRunning) OutlinedButton(onClick = onCancelAgent) { Text("Cancel task") }
+                if (state.agentReport.isNotBlank()) {
+                    Text("Live report preview", fontWeight = FontWeight.Bold)
+                    SelectionContainer { Text(state.agentReport.take(6000), style = MaterialTheme.typography.bodySmall) }
                 }
             }
             Spacer(Modifier.height(24.dp))

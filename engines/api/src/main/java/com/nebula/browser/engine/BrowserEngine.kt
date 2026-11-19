@@ -73,4 +73,5 @@ sealed interface EngineEvent {
     data class BlockedRequest(val tabId: String, val host: String) : EngineEvent
     data class SitePermissionRequested(val request: SitePermissionRequest) : EngineEvent
     data class ConsoleMessage(val tabId: String, val message: String, val source: String, val line: Int) : EngineEvent
+    data class ScrollChanged(val tabId: String, val scrollY: Int, val deltaY: Int) : EngineEvent
 }

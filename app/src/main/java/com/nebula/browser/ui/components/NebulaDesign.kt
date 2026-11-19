@@ -37,7 +37,7 @@ val NebulaGlass = Color(0xB0181428)
 val NebulaOutline = Color(0x589D6CFF)
 
 @Composable
-fun SpaceBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+fun SpaceBackground(modifier: Modifier = Modifier, style: String = "nebula", liquidEffects: Boolean = true, content: @Composable BoxScope.() -> Unit) {
     val dark = MaterialTheme.colorScheme.background.red < 0.2f
     val stars = remember {
         List(65) { index ->
@@ -48,17 +48,21 @@ fun SpaceBackground(modifier: Modifier = Modifier, content: @Composable BoxScope
             )
         }
     }
-    Box(modifier.fillMaxSize().background(
-        if (dark) Brush.verticalGradient(listOf(Color(0xFF030209), Color(0xFF0B0619), Color(0xFF030209)))
-        else Brush.verticalGradient(listOf(Color(0xFFF8F4FF), Color(0xFFEDE6FF), Color(0xFFF9F7FF)))
-    )) {
+    val backgroundBrush = when {
+        !dark -> Brush.verticalGradient(listOf(Color(0xFFF8F4FF), Color(0xFFEDE6FF), Color(0xFFF9F7FF)))
+        style == "aurora" -> Brush.verticalGradient(listOf(Color(0xFF010A12), Color(0xFF071C28), Color(0xFF03060D)))
+        style == "midnight" -> Brush.verticalGradient(listOf(Color(0xFF03040D), Color(0xFF0D1028), Color(0xFF03040D)))
+        style == "minimal" -> Brush.verticalGradient(listOf(Color(0xFF08080A), Color(0xFF101014)))
+        else -> Brush.verticalGradient(listOf(Color(0xFF030209), Color(0xFF0B0619), Color(0xFF030209)))
+    }
+    Box(modifier.fillMaxSize().background(backgroundBrush)) {
         Canvas(Modifier.fillMaxSize()) {
             if (dark) {
-                drawCircle(
-                    Brush.radialGradient(listOf(Color(0xFF4B1599).copy(alpha = .30f), Color(0xFF120626).copy(alpha = .08f), Color.Transparent)),
+                if (liquidEffects) drawCircle(
+                    Brush.radialGradient(listOf(if (style == "aurora") NebulaCyan.copy(alpha = .24f) else Color(0xFF4B1599).copy(alpha = .30f), Color(0xFF120626).copy(alpha = .08f), Color.Transparent)),
                     radius = size.width * .85f, center = Offset(size.width * .96f, size.height * .05f),
                 )
-                drawCircle(
+                if (liquidEffects) drawCircle(
                     Brush.radialGradient(listOf(Color(0xFF321176).copy(alpha = .24f), Color.Transparent)),
                     radius = size.width * .72f, center = Offset(-size.width * .08f, size.height * .82f),
                 )
@@ -66,7 +70,7 @@ fun SpaceBackground(modifier: Modifier = Modifier, content: @Composable BoxScope
                     drawCircle(Color.White.copy(alpha = 0.35f + star.third / 7f), star.third, Offset(size.width * star.first, size.height * star.second))
                 }
                 val waveBrush = Brush.linearGradient(listOf(NebulaViolet.copy(alpha = .05f), NebulaPurple.copy(alpha = .7f), NebulaCyan.copy(alpha = .32f), NebulaViolet.copy(alpha = .05f)))
-                listOf(0f, 22f, 44f).forEachIndexed { index, offset ->
+                if (liquidEffects) listOf(0f, 22f, 44f).forEachIndexed { index, offset ->
                     drawArc(
                         waveBrush, startAngle = 190f + index * 5, sweepAngle = 160f, useCenter = false,
                         topLeft = Offset(-size.width * .28f, size.height * .77f + offset),

@@ -242,6 +242,28 @@ fun SettingsScreen(
                 Slider(value = state.settings.homeColumns.toFloat(), onValueChange = { value -> onSettings { it.copy(homeColumns = value.toInt()) } }, valueRange = 3f..5f, steps = 1)
             }
             item { HorizontalDivider() }
+            item { Text("Display, gestures & smart home", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+            item { SettingSwitch("Full display / immersive mode", "Hides browser chrome and system bars on webpages. Use the floating menu, three fingers, or optional edge gesture to return.", state.settings.immersiveMode) { enabled -> onSettings { it.copy(immersiveMode = enabled) } } }
+            item { SettingSwitch("Auto-hide toolbar while scrolling", "Scroll down for more content; scroll up or use the floating menu to reveal controls.", state.settings.autoHideToolbar) { enabled -> onSettings { it.copy(autoHideToolbar = enabled) } } }
+            item { SettingSwitch("Three-finger menu gesture", "Open browser controls with a three-finger touch without consuming normal webpage gestures.", state.settings.threeFingerMenu) { enabled -> onSettings { it.copy(threeFingerMenu = enabled) } } }
+            item { SettingSwitch("Edge-swipe menu", "Optional narrow edge gesture. Disabled by default to prevent accidental website navigation conflicts.", state.settings.edgeMenuEnabled) { enabled -> onSettings { it.copy(edgeMenuEnabled = enabled) } } }
+            if (state.settings.edgeMenuEnabled) item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = state.settings.edgeMenuSide == "left", onClick = { onSettings { it.copy(edgeMenuSide = "left") } }, label = { Text("Left edge") })
+                FilterChip(selected = state.settings.edgeMenuSide == "right", onClick = { onSettings { it.copy(edgeMenuSide = "right") } }, label = { Text("Right edge") })
+            } }
+            item { SettingSwitch("Liquid glass effects", "Nebula clouds and animated-style orbital glass layers. Disable for a calmer background.", state.settings.liquidEffects) { enabled -> onSettings { it.copy(liquidEffects = enabled) } } }
+            item { GlassCard { Column(Modifier.padding(14.dp)) {
+                Text("Background style", fontWeight = FontWeight.SemiBold)
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("nebula", "aurora", "midnight", "minimal").forEach { style ->
+                        FilterChip(selected = state.settings.backgroundStyle == style, onClick = { onSettings { it.copy(backgroundStyle = style) } }, label = { Text(style.replaceFirstChar { it.uppercase() }, fontSize = 11.sp) })
+                    }
+                }
+            } } }
+            item { SettingSwitch("Most visited on Home", "Your Orbit ranks real websites using local visit counts.", state.settings.homeShowFrequent) { enabled -> onSettings { it.copy(homeShowFrequent = enabled) } } }
+            item { SettingSwitch("Home tips", "Show or hide the smart-search tip card.", state.settings.homeShowTips) { enabled -> onSettings { it.copy(homeShowTips = enabled) } } }
+            item { SettingSwitch("Live download notifications", "Percentage, speed, ETA and waiting-for-network status from the download monitor.", state.settings.downloadNotifications) { enabled -> onSettings { it.copy(downloadNotifications = enabled) } } }
+            item { HorizontalDivider() }
             item { Text("Search", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -44,6 +44,16 @@ class SettingsRepository(private val context: Context) {
             preferences[Keys.AI_TEMPERATURE] = next.aiTemperature
             preferences[Keys.DEVELOPER_MODE] = next.developerMode
             preferences[Keys.SHORTCUTS] = encodeShortcuts(next.shortcuts)
+            preferences[Keys.IMMERSIVE] = next.immersiveMode
+            preferences[Keys.AUTO_HIDE] = next.autoHideToolbar
+            preferences[Keys.EDGE_MENU] = next.edgeMenuEnabled
+            preferences[Keys.EDGE_SIDE] = next.edgeMenuSide
+            preferences[Keys.THREE_FINGER] = next.threeFingerMenu
+            preferences[Keys.LIQUID] = next.liquidEffects
+            preferences[Keys.FREQUENT] = next.homeShowFrequent
+            preferences[Keys.TIPS] = next.homeShowTips
+            preferences[Keys.BACKGROUND] = next.backgroundStyle
+            preferences[Keys.DOWNLOAD_NOTIFICATIONS] = next.downloadNotifications
         }
     }
 
@@ -66,6 +76,16 @@ class SettingsRepository(private val context: Context) {
         aiTemperature = p[Keys.AI_TEMPERATURE] ?: 0.3f,
         developerMode = p[Keys.DEVELOPER_MODE] ?: false,
         shortcuts = decodeShortcuts(p[Keys.SHORTCUTS]),
+        immersiveMode = p[Keys.IMMERSIVE] ?: false,
+        autoHideToolbar = p[Keys.AUTO_HIDE] ?: true,
+        edgeMenuEnabled = p[Keys.EDGE_MENU] ?: false,
+        edgeMenuSide = p[Keys.EDGE_SIDE] ?: "left",
+        threeFingerMenu = p[Keys.THREE_FINGER] ?: true,
+        liquidEffects = p[Keys.LIQUID] ?: true,
+        homeShowFrequent = p[Keys.FREQUENT] ?: true,
+        homeShowTips = p[Keys.TIPS] ?: true,
+        backgroundStyle = p[Keys.BACKGROUND] ?: "nebula",
+        downloadNotifications = p[Keys.DOWNLOAD_NOTIFICATIONS] ?: true,
     )
 
     private fun encodeEngines(engines: List<SearchEngine>): String = JSONArray().apply {
@@ -139,5 +159,15 @@ class SettingsRepository(private val context: Context) {
         val AI_TEMPERATURE = floatPreferencesKey("ai_temperature")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
         val SHORTCUTS = stringPreferencesKey("home_shortcuts")
+        val IMMERSIVE = booleanPreferencesKey("immersive_mode")
+        val AUTO_HIDE = booleanPreferencesKey("auto_hide_toolbar")
+        val EDGE_MENU = booleanPreferencesKey("edge_menu")
+        val EDGE_SIDE = stringPreferencesKey("edge_menu_side")
+        val THREE_FINGER = booleanPreferencesKey("three_finger_menu")
+        val LIQUID = booleanPreferencesKey("liquid_effects")
+        val FREQUENT = booleanPreferencesKey("home_frequent")
+        val TIPS = booleanPreferencesKey("home_tips")
+        val BACKGROUND = stringPreferencesKey("background_style")
+        val DOWNLOAD_NOTIFICATIONS = booleanPreferencesKey("download_notifications")
     }
 }

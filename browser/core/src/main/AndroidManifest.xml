@@ -1,5 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <service
+            android:name=".DownloadProgressService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
         <receiver
             android:name=".DownloadCompleteReceiver"
             android:exported="false">

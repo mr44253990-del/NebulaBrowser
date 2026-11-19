@@ -69,6 +69,20 @@ See [the 2.0 research notes](docs/RESEARCH_2_0.md) for Android platform guidance
 - Webpages use one compact 52dp address toolbar instead of separate address and navigation bars; the 58dp navigation dock remains on Home/Tabs.
 - Premium nebula clouds, cyan/purple orbital waves, and a layered 3D planet mark.
 
+
+## Nebula 3.0 platform update
+
+- Desktop mode now combines desktop UA, desktop UA Client Hints/form-factor, a 1280px viewport, wide viewport/overview settings, and per-tab persistence.
+- System-resilient downloads with live percentage/speed/ETA notifications, network-wait status, elapsed time, filters, and multi-select deletion.
+- Bounded, crash-resistant PDF page rendering and safer text/image/archive/media viewers.
+- Immersive display, auto-hide toolbar, floating menu, optional edge gesture, three-finger menu, and selectable background styles.
+- Real bundled brand vectors, most-visited Home ranking, and persistent ranked search suggestions.
+- Searchable tabs, drag-to-group handles, in-browser group dock, and same-group tab creation.
+- Installed `@grant none` userscripts with declared site permissions, separate from static CRX/XPI reports.
+- Approved safe AI research plans with real-time steps, up to 12 HTTPS sources, and local TXT/PDF report export.
+
+The AI agent is intentionally not an unrestricted arbitrary-action system. See the 3.0 research notes.
+
 ## Privacy and limitations
 
 Nebula has no app server and no analytics. Web requests go to visited sites. AI requests go directly to the user's configured provider only after confirmation. See [PRIVACY.md](docs/PRIVACY.md).

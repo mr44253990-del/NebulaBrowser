@@ -89,28 +89,48 @@ private fun ImageFileViewer(file: File, modifier: Modifier) {
 @Composable
 private fun PdfFileViewer(file: File, modifier: Modifier) {
     val renderer = remember(file) {
-        runCatching { PdfRenderer(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)) }.getOrNull()
+        runCatching {
+            require(file.exists() && file.length() > 0) { "PDF file is empty or unavailable" }
+            PdfRenderer(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
+        }.getOrNull()
     }
-    DisposableEffect(renderer) { onDispose { renderer?.close() } }
-    if (renderer == null) return Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Cannot open this PDF") }
-    var pageIndex by remember { mutableIntStateOf(0) }
-    val bitmap = remember(pageIndex, renderer) {
-        renderer.openPage(pageIndex).use { page ->
-            val width = 1080
-            val height = (width.toFloat() / page.width * page.height).toInt()
-            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
-                it.eraseColor(android.graphics.Color.WHITE)
-                page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+    DisposableEffect(renderer) { onDispose { runCatching { renderer?.close() } } }
+    if (renderer == null || renderer.pageCount <= 0) {
+        return Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Cannot preview this PDF safely. Use “Open with” to choose another PDF reader.")
+                TextButton(onClick = { }, enabled = false) { Text("Preview unavailable") }
             }
         }
     }
+    var pageIndex by remember(renderer) { mutableIntStateOf(0) }
+    val bitmap = remember(pageIndex, renderer) {
+        runCatching {
+            renderer.openPage(pageIndex).use { page ->
+                require(page.width > 0 && page.height > 0) { "Invalid PDF page" }
+                val width = 900 // Bounded rendering prevents oversized bitmap crashes.
+                val height = (width.toFloat() / page.width * page.height).toInt().coerceIn(1, 4096)
+                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
+                    it.eraseColor(android.graphics.Color.WHITE)
+                    page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                }
+            }
+        }.getOrNull()
+    }
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { pageIndex-- }, enabled = pageIndex > 0) { Icon(Icons.Default.ArrowBack, "Previous page") }
+            IconButton(onClick = { pageIndex = (pageIndex - 1).coerceAtLeast(0) }, enabled = pageIndex > 0) { Icon(Icons.Default.ArrowBack, "Previous page") }
             Text("Page ${pageIndex + 1} / ${renderer.pageCount}")
-            IconButton(onClick = { pageIndex++ }, enabled = pageIndex + 1 < renderer.pageCount) { Icon(Icons.Default.ArrowForward, "Next page") }
+            IconButton(onClick = { pageIndex = (pageIndex + 1).coerceAtMost(renderer.pageCount - 1) }, enabled = pageIndex + 1 < renderer.pageCount) { Icon(Icons.Default.ArrowForward, "Next page") }
         }
-        Image(bitmap.asImageBitmap(), "PDF page", modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentScale = ContentScale.FillWidth)
+        if (bitmap == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("This PDF page could not be rendered") }
+        else Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Image(
+                bitmap.asImageBitmap(), "PDF page ${pageIndex + 1}",
+                modifier = Modifier.fillMaxWidth().height(with(androidx.compose.ui.platform.LocalDensity.current) { bitmap.height.toDp() }),
+                contentScale = ContentScale.FillWidth,
+            )
+        }
     }
 }
 
