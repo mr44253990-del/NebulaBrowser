@@ -30,8 +30,21 @@ interface BrowserSession {
     fun findInPage(query: String)
     fun clearFind()
     fun printPage()
+    fun capturePreview(): Bitmap?
+    fun saveState(): ByteArray?
+    fun restoreState(data: ByteArray)
+    fun flushCookies()
     fun destroy()
 }
+
+data class SitePermissionRequest(
+    val tabId: String,
+    val origin: String,
+    val resources: List<String>,
+    val androidPermissions: List<String>,
+    val grant: () -> Unit,
+    val deny: () -> Unit,
+)
 
 sealed interface EngineEvent {
     data class UrlChanged(val tabId: String, val url: String) : EngineEvent
@@ -58,4 +71,6 @@ sealed interface EngineEvent {
     ) : EngineEvent
     data class ExternalRequest(val tabId: String, val url: String) : EngineEvent
     data class BlockedRequest(val tabId: String, val host: String) : EngineEvent
+    data class SitePermissionRequested(val request: SitePermissionRequest) : EngineEvent
+    data class ConsoleMessage(val tabId: String, val message: String, val source: String, val line: Int) : EngineEvent
 }

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.History
@@ -74,6 +75,8 @@ import com.nebula.browser.UiEffect
 import com.nebula.browser.ui.components.AddressBar
 import com.nebula.browser.ui.components.FindBar
 import com.nebula.browser.ui.components.HomePage
+import com.nebula.browser.ui.components.NebulaBottomBar
+import com.nebula.browser.ui.components.SpaceBackground
 import com.nebula.browser.ui.components.QrCodeDialog
 import com.nebula.browser.ui.components.TabSwitcher
 import com.nebula.browser.ui.components.WebSessionView
@@ -83,6 +86,8 @@ import com.nebula.browser.ui.screens.BookmarksScreen
 import com.nebula.browser.ui.screens.DownloadsScreen
 import com.nebula.browser.ui.screens.ExtensionsScreen
 import com.nebula.browser.ui.screens.HistoryScreen
+import com.nebula.browser.ui.screens.FileViewerScreen
+import com.nebula.browser.ui.screens.DeveloperScreen
 import com.nebula.browser.ui.screens.PasswordsScreen
 import com.nebula.browser.ui.screens.PrivacyScreen
 import com.nebula.browser.ui.screens.ReaderScreen
@@ -90,7 +95,7 @@ import com.nebula.browser.ui.screens.SettingsScreen
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-private enum class AppScreen { BROWSER, TABS, HISTORY, BOOKMARKS, DOWNLOADS, EXTENSIONS, PASSWORDS, PRIVACY, SETTINGS }
+private enum class AppScreen { BROWSER, TABS, HISTORY, BOOKMARKS, DOWNLOADS, EXTENSIONS, PASSWORDS, PRIVACY, DEVELOPER, SETTINGS }
 
 @Composable
 fun NebulaApp(viewModel: BrowserViewModel) {
@@ -112,6 +117,11 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
     var fileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     var allowMultipleFiles by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val locationOnly = viewModel.state.value.pendingPermission?.resources == listOf("location")
+        viewModel.resolveSitePermission(if (locationOnly) grants.values.any { it } else grants.values.all { it })
+    }
 
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         val result = if (allowMultipleFiles) uris.toTypedArray() else uris.take(1).toTypedArray()
@@ -153,9 +163,9 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = screen == AppScreen.BROWSER,
+        gesturesEnabled = false, // Prevent accidental browser-navigation swipes from opening the drawer.
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(modifier = androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                 Text("NEBULA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, modifier = Modifier.padding(22.dp), color = MaterialTheme.colorScheme.primary)
                 DrawerItem("New tab", Icons.Default.Add) { viewModel.createTab(); openScreen(AppScreen.BROWSER) }
                 DrawerItem("New private tab", Icons.Default.Lock) { viewModel.createTab(privateMode = true); openScreen(AppScreen.BROWSER) }
@@ -180,13 +190,16 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                 }
                 DrawerItem("Page QR code", Icons.Default.QrCode) { if (state.currentUrl.isNotBlank()) showQr = true; openScreen(AppScreen.BROWSER) }
                 DrawerItem("Privacy controls", Icons.Default.PrivacyTip) { openScreen(AppScreen.PRIVACY) }
+                if (state.settings.developerMode) DrawerItem("Developer console", Icons.Default.Code) { openScreen(AppScreen.DEVELOPER) }
                 DrawerItem("Settings", Icons.Default.Settings) { openScreen(AppScreen.SETTINGS) }
             }
         },
     ) {
-        Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { rootPadding ->
+        SpaceBackground {
+        Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = androidx.compose.ui.graphics.Color.Transparent) { rootPadding ->
             Box(Modifier.fillMaxSize().padding(rootPadding)) {
                 when {
+                    state.openedFile != null -> FileViewerScreen(state.openedFile!!, viewModel::closeFileViewer, { viewModel.openDownloadExternally(state.openedFile!!.id) }, { viewModel.shareDownload(state.openedFile!!.id) })
                     state.readerVisible -> ReaderScreen(state.currentTitle, state.readerText, viewModel::hideReader) { showAi = true }
                     screen == AppScreen.TABS -> TabSwitcher(
                         state = state,
@@ -198,13 +211,21 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                         onCloseOthers = viewModel::closeOtherTabs,
                         onRestore = { viewModel.restoreClosedTab(); screen = AppScreen.BROWSER },
                         onBack = { screen = AppScreen.BROWSER },
+                        onRename = viewModel::renameTab,
+                        onGroup = viewModel::setTabGroup,
+                        onMove = viewModel::moveTabToWorkspace,
+                        onDuplicate = viewModel::duplicateTab,
+                        onCloseAll = viewModel::closeAllInWorkspace,
+                        onForward = viewModel::goForward,
+                        onReload = viewModel::reload,
                     )
                     screen == AppScreen.HISTORY -> HistoryScreen(state, { screen = AppScreen.BROWSER }, { viewModel.navigate(it); screen = AppScreen.BROWSER }, viewModel::deleteHistory, viewModel::clearHistory)
                     screen == AppScreen.BOOKMARKS -> BookmarksScreen(state, { screen = AppScreen.BROWSER }, { viewModel.navigate(it); screen = AppScreen.BROWSER }, viewModel::deleteBookmark, viewModel::importBookmarks, viewModel::exportBookmarks)
-                    screen == AppScreen.DOWNLOADS -> DownloadsScreen(state, { screen = AppScreen.BROWSER }, viewModel::refreshDownloads, viewModel::openDownload, viewModel::cancelDownload, viewModel::removeDownload, viewModel::retryDownload)
+                    screen == AppScreen.DOWNLOADS -> DownloadsScreen(state, { screen = AppScreen.BROWSER }, viewModel::refreshDownloads, viewModel::openDownload, viewModel::cancelDownload, viewModel::removeDownload, viewModel::retryDownload, viewModel::openDownloadExternally, viewModel::shareDownload)
                     screen == AppScreen.EXTENSIONS -> ExtensionsScreen(state, { screen = AppScreen.BROWSER }, viewModel::importExtension, viewModel::clearExtensionReports)
                     screen == AppScreen.PASSWORDS -> PasswordsScreen(state, { screen = AppScreen.BROWSER }, viewModel::refreshPasswords, viewModel::savePassword, viewModel::deletePassword, viewModel::generatePassword)
                     screen == AppScreen.PRIVACY -> PrivacyScreen(state, { screen = AppScreen.BROWSER }, viewModel::updateSettings, viewModel::clearBrowsingData)
+                    screen == AppScreen.DEVELOPER -> DeveloperScreen(state, { screen = AppScreen.BROWSER }, viewModel::runDeveloperScript, viewModel::viewPageSource)
                     screen == AppScreen.SETTINGS -> SettingsScreen(state, { screen = AppScreen.BROWSER }, viewModel::updateSettings, viewModel::addCustomSearchEngine, viewModel.aiAssistant.apiKey, { viewModel.aiAssistant.apiKey = it })
                     else -> BrowserContent(
                         state = state,
@@ -229,12 +250,27 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                             })
                         },
                         onExtensions = { screen = AppScreen.EXTENSIONS },
+                        onProfile = { screen = AppScreen.TABS },
+                        onNotifications = { screen = AppScreen.DOWNLOADS },
                     )
                 }
             }
         }
+        }
     }
 
+    state.pendingPermission?.let { request ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewModel.resolveSitePermission(false) },
+            title = { Text("Website permission") },
+            text = { Text("${request.origin}\n\nAllow ${request.resources.joinToString()} for this site? Android permission may also be requested.") },
+            confirmButton = { androidx.compose.material3.Button(onClick = {
+                if (request.androidPermissions.isEmpty()) viewModel.resolveSitePermission(true)
+                else permissionLauncher.launch(request.androidPermissions.toTypedArray())
+            }) { Text("Allow") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { viewModel.resolveSitePermission(false) }) { Text("Deny") } },
+        )
+    }
     if (showQr && state.currentUrl.isNotBlank()) QrCodeDialog(state.currentUrl) { showQr = false }
     if (showAi) AiAssistantSheet(
         loading = state.aiLoading,
@@ -250,6 +286,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
     BackHandler {
         when {
             showAi -> showAi = false
+            state.openedFile != null -> viewModel.closeFileViewer()
             state.readerVisible -> viewModel.hideReader()
             screen != AppScreen.BROWSER -> screen = AppScreen.BROWSER
             showFind -> { showFind = false; viewModel.findInPage("") }
@@ -279,28 +316,25 @@ private fun BrowserContent(
     onVoice: () -> Unit,
     onScanQr: () -> Unit,
     onExtensions: () -> Unit,
+    onProfile: () -> Unit,
+    onNotifications: () -> Unit,
 ) {
     Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             if (!state.settings.bottomToolbar) AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu)
         },
         bottomBar = {
             Column {
                 if (state.settings.bottomToolbar) AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    IconButton(onClick = viewModel::goBack, enabled = state.canGoBack) { Icon(Icons.Default.ArrowBack, "Back") }
-                    IconButton(onClick = viewModel::goForward, enabled = state.canGoForward) { Icon(Icons.Default.ArrowForward, "Forward") }
-                    IconButton(onClick = viewModel::newHomeTab) { Icon(Icons.Default.Home, "Home") }
-                    IconButton(onClick = if (state.loading) viewModel::stop else viewModel::reload) { Icon(Icons.Default.Refresh, "Reload or stop") }
-                    IconButton(onClick = onTabs) { Icon(Icons.Default.Tab, "Tabs") }
-                }
+                NebulaBottomBar(state, viewModel::goBack, viewModel::goForward, viewModel::newHomeTab, if (state.loading) viewModel::stop else viewModel::reload, onTabs)
             }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (showFind) FindBar(viewModel::findInPage, onFindClose)
             Box(Modifier.fillMaxSize()) {
-                if (state.isHome) HomePage(state, viewModel::navigate, onVoice, onScanQr, onExtensions)
+                if (state.isHome) HomePage(state, viewModel::navigate, onVoice, onScanQr, onExtensions, onProfile, onNotifications, viewModel::addShortcut, viewModel::removeShortcut, viewModel::moveShortcut)
                 else WebSessionView(viewModel.activeSession())
             }
         }

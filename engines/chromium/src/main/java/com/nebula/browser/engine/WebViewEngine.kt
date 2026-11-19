@@ -5,9 +5,13 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
+import android.os.Bundle
+import android.os.Parcel
 import android.print.PrintAttributes
+import android.util.Log
 import android.print.PrintManager
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
@@ -60,6 +64,9 @@ private class WebViewSession(
             domStorageEnabled = !privateMode
             databaseEnabled = !privateMode
             loadsImagesAutomatically = true
+            blockNetworkImage = false
+            blockNetworkLoads = false
+            offscreenPreRaster = true
             builtInZoomControls = true
             displayZoomControls = false
             useWideViewPort = true
@@ -85,7 +92,8 @@ private class WebViewSession(
 
     init {
         CookieManager.getInstance().apply {
-            setAcceptCookie(!privateMode)
+            // WebView's cookie store is process-wide. Never disable normal login cookies globally.
+            setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, !privateMode && !privacyConfig().blockThirdPartyCookies)
         }
     }
@@ -141,6 +149,44 @@ private class WebViewSession(
         printManager.print("Nebula Browser", adapter, PrintAttributes.Builder().build())
     }
 
+    override fun capturePreview(): Bitmap? {
+        if (destroyed || webView.width <= 0 || webView.height <= 0) return null
+        return runCatching {
+            val scale = minOf(1f, 640f / webView.width)
+            val bitmap = Bitmap.createBitmap((webView.width * scale).toInt().coerceAtLeast(1), (webView.height * scale * .62f).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            canvas.scale(scale, scale)
+            webView.draw(canvas)
+            bitmap
+        }.getOrNull()
+    }
+
+    override fun saveState(): ByteArray? {
+        if (destroyed) return null
+        return runCatching {
+            val bundle = Bundle()
+            webView.saveState(bundle)
+            val parcel = Parcel.obtain()
+            try { parcel.writeBundle(bundle); parcel.marshall() } finally { parcel.recycle() }
+        }.getOrNull()
+    }
+
+    override fun restoreState(data: ByteArray) {
+        if (destroyed) return
+        runCatching {
+            val parcel = Parcel.obtain()
+            try {
+                parcel.unmarshall(data, 0, data.size)
+                parcel.setDataPosition(0)
+                val bundle = Bundle.CREATOR.createFromParcel(parcel)
+                bundle.classLoader = WebView::class.java.classLoader
+                webView.restoreState(bundle)
+            } finally { parcel.recycle() }
+        }
+    }
+
+    override fun flushCookies() = CookieManager.getInstance().flush()
+
     override fun destroy() {
         if (destroyed) return
         destroyed = true
@@ -154,7 +200,7 @@ private class WebViewSession(
     private fun createClient() = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val scheme = request.url.scheme ?: return true
-            if (scheme == "http" || scheme == "https" || scheme == "about" || scheme == "data") return false
+            if (scheme == "http" || scheme == "https" || scheme == "about" || scheme == "data" || scheme == "view-source") return false
             mutableEvents.tryEmit(EngineEvent.ExternalRequest(tabId, request.url.toString()))
             return true
         }
@@ -199,12 +245,33 @@ private class WebViewSession(
         override fun onReceivedIcon(view: WebView, icon: Bitmap?) = Unit
 
         override fun onPermissionRequest(request: PermissionRequest) {
-            // Secure default. Native runtime permission integration must explicitly grant resources.
-            request.deny()
+            val supported = request.resources.filter {
+                it == PermissionRequest.RESOURCE_VIDEO_CAPTURE || it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
+            }
+            if (supported.isEmpty()) return request.deny()
+            val androidPermissions = supported.mapNotNull {
+                when (it) {
+                    PermissionRequest.RESOURCE_VIDEO_CAPTURE -> android.Manifest.permission.CAMERA
+                    PermissionRequest.RESOURCE_AUDIO_CAPTURE -> android.Manifest.permission.RECORD_AUDIO
+                    else -> null
+                }
+            }.distinct()
+            mutableEvents.tryEmit(EngineEvent.SitePermissionRequested(SitePermissionRequest(
+                tabId, request.origin.toString(), supported, androidPermissions,
+                grant = { request.grant(supported.toTypedArray()) }, deny = { request.deny() },
+            )))
         }
 
         override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
-            callback.invoke(origin, false, false)
+            mutableEvents.tryEmit(EngineEvent.SitePermissionRequested(SitePermissionRequest(
+                tabId, origin, listOf("location"), listOf(android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION),
+                grant = { callback.invoke(origin, true, false) }, deny = { callback.invoke(origin, false, false) },
+            )))
+        }
+
+        override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+            mutableEvents.tryEmit(EngineEvent.ConsoleMessage(tabId, consoleMessage.message(), consoleMessage.sourceId() ?: "", consoleMessage.lineNumber()))
+            return true
         }
 
         override fun onShowFileChooser(

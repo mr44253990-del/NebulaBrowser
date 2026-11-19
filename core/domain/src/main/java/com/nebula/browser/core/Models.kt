@@ -10,6 +10,8 @@ data class BrowserTab(
     val isPinned: Boolean = false,
     val workspaceId: String = "personal",
     val groupName: String? = null,
+    val desktopMode: Boolean = false,
+    val previewPath: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val lastOpenedAt: Long = System.currentTimeMillis(),
 )
@@ -76,6 +78,14 @@ data class PasswordCredential(
     val updatedAt: Long = System.currentTimeMillis(),
 )
 
+data class HomeShortcut(
+    val id: String,
+    val title: String,
+    val url: String,
+    val symbol: String,
+    val color: Long = 0xFF7C4DFF,
+)
+
 data class BrowserSettings(
     val searchEngineId: String = "duckduckgo",
     val customSearchEngines: List<SearchEngine> = emptyList(),
@@ -93,6 +103,8 @@ data class BrowserSettings(
     val aiEndpoint: String = "https://api.openai.com/v1",
     val aiModel: String = "gpt-4o-mini",
     val aiTemperature: Float = 0.3f,
+    val developerMode: Boolean = false,
+    val shortcuts: List<HomeShortcut> = DefaultHomeShortcuts.all,
 )
 
 data class ExtensionReport(
@@ -133,3 +145,16 @@ object DefaultSearchEngines {
 }
 
 fun String.encodeUrlParameter(): String = java.net.URLEncoder.encode(this, "UTF-8")
+
+
+object DefaultHomeShortcuts {
+    val all = listOf(
+        HomeShortcut("google", "Google", "https://google.com", "G", 0xFF4285F4),
+        HomeShortcut("youtube", "YouTube", "https://youtube.com", "▶", 0xFFFF0033),
+        HomeShortcut("wikipedia", "Wikipedia", "https://wikipedia.org", "W", 0xFFEEEEEE),
+        HomeShortcut("github", "GitHub", "https://github.com", "GH", 0xFFF5F5F5),
+        HomeShortcut("gmail", "Gmail", "https://mail.google.com", "M", 0xFFEA4335),
+        HomeShortcut("duckduckgo", "DuckDuckGo", "https://duckduckgo.com", "D", 0xFFDE5833),
+        HomeShortcut("facebook", "Facebook", "https://facebook.com", "f", 0xFF1877F2),
+    )
+}

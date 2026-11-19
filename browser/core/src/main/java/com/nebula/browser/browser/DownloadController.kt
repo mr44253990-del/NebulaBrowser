@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
+import java.io.File
 import com.nebula.browser.core.DownloadItem
 import com.nebula.browser.core.DownloadStatus
 import com.nebula.browser.core.NebulaDatabase
@@ -88,9 +91,27 @@ class DownloadController(context: Context, private val database: NebulaDatabase)
         return enqueue(item.url, item.fileName, item.mimeType, null, wifiOnly)
     }
 
-    fun openIntent(id: Long): Intent? = manager.getUriForDownloadedFile(id)?.let { uri ->
-        Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, manager.getMimeTypeForDownloadedFile(id))
+    suspend fun openIntent(id: Long): Intent? = fileIntent(id, Intent.ACTION_VIEW)
+    suspend fun shareIntent(id: Long): Intent? = fileIntent(id, Intent.ACTION_SEND)
+
+    suspend fun downloadedFile(id: Long): File? = withContext(Dispatchers.IO) {
+        val item = dao.byId(id)?.toModel() ?: return@withContext null
+        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Nebula/${item.fileName}").takeIf { it.exists() }
+    }
+
+    private suspend fun fileIntent(id: Long, action: String): Intent? {
+        val file = downloadedFile(id) ?: return null
+        val uri = FileProvider.getUriForFile(appContext, "${appContext.packageName}.files", file)
+        val extension = file.extension.lowercase()
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: if (extension == "apk") "application/vnd.android.package-archive" else "*/*"
+        val target = if (action == Intent.ACTION_SEND) Intent(action).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+        } else Intent(action).apply { setDataAndType(uri, mime) }
+        target.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        target.clipData = android.content.ClipData.newUri(appContext.contentResolver, file.name, uri)
+        return Intent.createChooser(target, if (action == Intent.ACTION_SEND) "Share ${file.name}" else "Open ${file.name}").apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     }

@@ -16,6 +16,11 @@ class MainActivity : FragmentActivity() {
         intent?.data?.toString()?.let(browserViewModel::navigate)
     }
 
+    override fun onPause() {
+        browserViewModel.persistSessions()
+        super.onPause()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

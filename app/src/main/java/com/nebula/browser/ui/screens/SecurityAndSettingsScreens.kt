@@ -1,6 +1,8 @@
 package com.nebula.browser.ui.screens
 
 import androidx.biometric.BiometricPrompt
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -58,6 +60,7 @@ import androidx.fragment.app.FragmentActivity
 import com.nebula.browser.BrowserUiState
 import com.nebula.browser.core.BrowserSettings
 import com.nebula.browser.core.PasswordCredential
+import com.nebula.browser.ui.components.GlassCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,7 +93,7 @@ fun PasswordsScreen(
             .build())
     }
 
-    Scaffold(topBar = {
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = {
         LibraryTopBar("Password vault", onBack) {
             if (unlocked) IconButton(onClick = { editorVisible = true }) { Icon(Icons.Default.Add, "Add credential") }
         }
@@ -167,7 +170,7 @@ fun PasswordsScreen(
 @Composable
 fun PrivacyScreen(state: BrowserUiState, onBack: () -> Unit, onSettings: ((BrowserSettings) -> BrowserSettings) -> Unit, onClearData: () -> Unit) {
     var confirmClear by remember { mutableStateOf(false) }
-    Scaffold(topBar = { LibraryTopBar("Privacy control center", onBack) }) { padding ->
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = { LibraryTopBar("Privacy control center", onBack) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
@@ -184,7 +187,7 @@ fun PrivacyScreen(state: BrowserUiState, onBack: () -> Unit, onSettings: ((Brows
             item { SettingSwitch("HTTPS-first", "Typed domain names are upgraded to HTTPS. Certificate errors are never bypassed.", state.settings.httpsFirst) { enabled -> onSettings { it.copy(httpsFirst = enabled) } } }
             item { SettingSwitch("Wi-Fi only downloads", "New download requests will avoid metered and roaming connections.", state.settings.downloadWifiOnly) { enabled -> onSettings { it.copy(downloadWifiOnly = enabled) } } }
             item { OutlinedButton(onClick = { confirmClear = true }, modifier = Modifier.fillMaxWidth()) { Text("Clear history and all WebView sessions") } }
-            item { Text("Private tabs: history is excluded, cookies and DOM storage are disabled, and cache is cleared when tabs close. Android WebView is process-shared; do not treat it as a separate security profile.", style = MaterialTheme.typography.bodySmall) }
+            item { Text("Private tabs exclude persistent history, disable DOM storage, and clear WebView history/cache on close. WebView cookies are process-wide; private tabs are not a separate security profile.", style = MaterialTheme.typography.bodySmall) }
         }
     }
     if (confirmClear) AlertDialog(
@@ -207,15 +210,33 @@ fun SettingsScreen(
     onApiKey: (String) -> Unit,
 ) {
     var engineDialog by remember { mutableStateOf(false) }
+    var permissionRevision by remember { mutableStateOf(0) }
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permissionRevision++
+    }
+    fun isGranted(permission: String): Boolean {
+        permissionRevision.hashCode()
+        return ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
     var apiKey by remember(initialApiKey) { mutableStateOf(initialApiKey) }
     var endpoint by remember(state.settings.aiEndpoint) { mutableStateOf(state.settings.aiEndpoint) }
     var model by remember(state.settings.aiModel) { mutableStateOf(state.settings.aiModel) }
-    Scaffold(topBar = { LibraryTopBar("Settings", onBack) }) { padding ->
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = { LibraryTopBar("Settings", onBack) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text("Experience", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
             item { SettingSwitch("Dark theme", "Use Nebula's AMOLED-friendly color palette.", state.settings.darkTheme) { enabled -> onSettings { it.copy(darkTheme = enabled) } } }
             item { SettingSwitch("Bottom address bar", "Reach navigation controls with one hand.", state.settings.bottomToolbar) { enabled -> onSettings { it.copy(bottomToolbar = enabled) } } }
             item { SettingSwitch("JavaScript", "Required by most modern sites. Changes apply to active and new sessions.", state.settings.javaScriptEnabled) { enabled -> onSettings { it.copy(javaScriptEnabled = enabled) } } }
+            item { SettingSwitch("Developer Mode", "Enables Chromium remote inspection, JavaScript evaluator, page source and console logs.", state.settings.developerMode) { enabled -> onSettings { it.copy(developerMode = enabled) } } }
+            item { HorizontalDivider() }
+            item { Text("Device permissions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+            item { GlassCard { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PermissionButton("Camera", "Used for QR scanning and approved website video capture", isGranted(android.Manifest.permission.CAMERA)) { permissionLauncher.launch(arrayOf(android.Manifest.permission.CAMERA)) }
+                PermissionButton("Microphone", "Requested only when an approved website needs audio capture", isGranted(android.Manifest.permission.RECORD_AUDIO)) { permissionLauncher.launch(arrayOf(android.Manifest.permission.RECORD_AUDIO)) }
+                PermissionButton("Location", "Approximate and precise location for approved websites", isGranted(android.Manifest.permission.ACCESS_COARSE_LOCATION)) { permissionLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION)) }
+                if (android.os.Build.VERSION.SDK_INT >= 33) PermissionButton("Notifications", "Download completion and browser activity notifications", isGranted(android.Manifest.permission.POST_NOTIFICATIONS)) { permissionLauncher.launch(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS)) }
+            } } }
             item {
                 Text("Home grid columns: ${state.settings.homeColumns}")
                 Slider(value = state.settings.homeColumns.toFloat(), onValueChange = { value -> onSettings { it.copy(homeColumns = value.toInt()) } }, valueRange = 3f..5f, steps = 1)
@@ -270,11 +291,20 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Card {
+    GlassCard {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.SemiBold); Text(subtitle, style = MaterialTheme.typography.bodySmall) }
             Spacer(Modifier.width(12.dp))
             Switch(checked, onChange)
         }
+    }
+}
+
+
+@Composable
+private fun PermissionButton(title: String, subtitle: String, granted: Boolean, onRequest: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.SemiBold); Text(subtitle, style = MaterialTheme.typography.bodySmall) }
+        TextButton(onClick = onRequest, enabled = !granted) { Text(if (granted) "Allowed" else "Allow") }
     }
 }

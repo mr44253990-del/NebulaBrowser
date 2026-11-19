@@ -2,7 +2,7 @@
 
 A real, modular Android browser built with **Kotlin, Jetpack Compose, Material 3, Room, DataStore, Android Keystore, and Chromium System WebView**.
 
-> **Honest extension support:** Nebula 1.0 includes a static CRX/XPI/ZIP compatibility analyzer. It does **not** claim to execute desktop Chrome or Firefox extensions. Full extension execution requires a native Chromium extension runtime and/or GeckoView engine, which is documented in the roadmap.
+> **Honest extension support:** Nebula includes a static CRX/XPI/ZIP compatibility analyzer. It does **not** claim to execute desktop Chrome or Firefox extensions. Full extension execution requires a native Chromium extension runtime and/or GeckoView engine, which is documented in the roadmap.
 
 ## Working features
 
@@ -48,8 +48,21 @@ docs/                  Architecture, privacy, features, and roadmap
 
 The UI communicates with `BrowserEngine`/`BrowserSession`, not directly with WebView. A Gecko engine can therefore be added without rewriting browser data modules.
 
+
+## Nebula 2.0 update
+
+- Responsive purple-neon/glass design across Home, Workspaces, Settings, libraries, and tools.
+- Persistent normal tabs and WebView navigation state, real page previews, named tab groups, and long-press tab controls.
+- Add/remove/rearrange home shortcuts and per-tab desktop mode.
+- Built-in text/code, image, PDF, ZIP listing, and media file viewers plus FileProvider open/share.
+- Origin + Android runtime permission prompts for camera, microphone, and location.
+- Developer Mode with Chromium remote debugging, JS evaluator, page console/source, and local crash reports.
+- Drawer opens only from the menu button, preventing accidental website swipe gestures; the drawer itself is scrollable.
+
+See [the 2.0 research notes](docs/RESEARCH_2_0.md) for Android platform guidance and future candidates.
+
 ## Privacy and limitations
 
 Nebula has no app server and no analytics. Web requests go to visited sites. AI requests go directly to the user's configured provider only after confirmation. See [PRIVACY.md](docs/PRIVACY.md).
 
-This is a substantial 1.0 foundation, not the entire multi-year master plan. Unsupported features are listed transparently in [FEATURES.md](docs/FEATURES.md) and [ROADMAP.md](docs/ROADMAP.md).
+This is a substantial 2.0 foundation, not the entire multi-year master plan. Unsupported features are listed transparently in [FEATURES.md](docs/FEATURES.md) and [ROADMAP.md](docs/ROADMAP.md).

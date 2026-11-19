@@ -42,6 +42,8 @@ class SettingsRepository(private val context: Context) {
             preferences[Keys.AI_ENDPOINT] = next.aiEndpoint
             preferences[Keys.AI_MODEL] = next.aiModel
             preferences[Keys.AI_TEMPERATURE] = next.aiTemperature
+            preferences[Keys.DEVELOPER_MODE] = next.developerMode
+            preferences[Keys.SHORTCUTS] = encodeShortcuts(next.shortcuts)
         }
     }
 
@@ -62,6 +64,8 @@ class SettingsRepository(private val context: Context) {
         aiEndpoint = p[Keys.AI_ENDPOINT] ?: "https://api.openai.com/v1",
         aiModel = p[Keys.AI_MODEL] ?: "gpt-4o-mini",
         aiTemperature = p[Keys.AI_TEMPERATURE] ?: 0.3f,
+        developerMode = p[Keys.DEVELOPER_MODE] ?: false,
+        shortcuts = decodeShortcuts(p[Keys.SHORTCUTS]),
     )
 
     private fun encodeEngines(engines: List<SearchEngine>): String = JSONArray().apply {
@@ -93,6 +97,27 @@ class SettingsRepository(private val context: Context) {
         }
     }.getOrDefault(emptyList())
 
+    private fun encodeShortcuts(shortcuts: List<HomeShortcut>): String = JSONArray().apply {
+        shortcuts.forEach { shortcut -> put(JSONObject().apply {
+            put("id", shortcut.id); put("title", shortcut.title); put("url", shortcut.url)
+            put("symbol", shortcut.symbol); put("color", shortcut.color)
+        }) }
+    }.toString()
+
+    private fun decodeShortcuts(raw: String?): List<HomeShortcut> {
+        if (raw == null) return DefaultHomeShortcuts.all
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.getJSONObject(index)
+                    add(HomeShortcut(item.getString("id"), item.getString("title"), item.getString("url"),
+                        item.optString("symbol", item.getString("title").take(1)), item.optLong("color", 0xFF7C4DFF)))
+                }
+            }
+        }.getOrDefault(DefaultHomeShortcuts.all)
+    }
+
     private object Keys {
         val SEARCH_ENGINE = stringPreferencesKey("search_engine")
         val CUSTOM_ENGINES = stringPreferencesKey("custom_engines")
@@ -110,5 +135,7 @@ class SettingsRepository(private val context: Context) {
         val AI_ENDPOINT = stringPreferencesKey("ai_endpoint")
         val AI_MODEL = stringPreferencesKey("ai_model")
         val AI_TEMPERATURE = floatPreferencesKey("ai_temperature")
+        val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
+        val SHORTCUTS = stringPreferencesKey("home_shortcuts")
     }
 }

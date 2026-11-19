@@ -2,6 +2,9 @@ package com.nebula.browser.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +30,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
@@ -59,6 +68,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -80,6 +90,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -163,19 +174,21 @@ fun WebSessionView(session: BrowserSession?) {
     DisposableEffect(session) { onDispose { session.detach() } }
 }
 
-private data class QuickLink(val title: String, val url: String, val symbol: String)
+@Composable
+private fun NebulaMark(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        drawCircle(NebulaPurple.copy(alpha = .28f), radius = size.minDimension * .46f)
+        drawCircle(NebulaPurple, radius = size.minDimension * .29f, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+        drawArc(
+            NebulaCyan, 195f, 330f, false,
+            topLeft = androidx.compose.ui.geometry.Offset(-size.width * .12f, size.height * .28f),
+            size = androidx.compose.ui.geometry.Size(size.width * 1.24f, size.height * .46f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round),
+        )
+    }
+}
 
-private val quickLinks = listOf(
-    QuickLink("Google", "https://google.com", "G"),
-    QuickLink("YouTube", "https://youtube.com", "▶"),
-    QuickLink("Wikipedia", "https://wikipedia.org", "W"),
-    QuickLink("GitHub", "https://github.com", "GH"),
-    QuickLink("Gmail", "https://mail.google.com", "M"),
-    QuickLink("DuckDuckGo", "https://duckduckgo.com", "D"),
-    QuickLink("Facebook", "https://facebook.com", "f"),
-    QuickLink("Add website", "https://www.google.com/search?q=add+custom+shortcut+help", "+"),
-)
-
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomePage(
     state: BrowserUiState,
@@ -183,79 +196,169 @@ fun HomePage(
     onVoice: () -> Unit,
     onScanQr: () -> Unit,
     onExtensions: () -> Unit,
+    onProfile: () -> Unit,
+    onNotifications: () -> Unit,
+    onAddShortcut: (String, String) -> Unit,
+    onRemoveShortcut: (String) -> Unit,
+    onMoveShortcut: (String, Int) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(28.dp))
-        Text("NEBULA", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-        Text("Browse beyond boundaries", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search privately or type a URL") },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            trailingIcon = {
-                Row {
-                    TextButton(onClick = onVoice) { Text("Voice") }
-                    IconButton(onClick = onScanQr) { Icon(Icons.Default.QrCode, "Scan QR") }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(28.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { if (query.isNotBlank()) onNavigate(query) }),
-        )
-        Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = { onNavigate("10 km to mi") }, label = { Text("Smart calculator") })
-            AssistChip(onClick = onExtensions, label = { Text("Extension lab") })
+    var addDialog by remember { mutableStateOf(false) }
+    var editId by remember { mutableStateOf<String?>(null) }
+    var tipVisible by remember { mutableStateOf(true) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val iconSize = when {
+            maxWidth <= 360.dp -> 64.dp
+            maxWidth <= 400.dp -> 72.dp
+            maxWidth <= 480.dp -> 76.dp
+            else -> 80.dp
         }
-        Spacer(Modifier.height(22.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(state.settings.homeColumns.coerceIn(3, 5)),
-            modifier = Modifier.fillMaxWidth().height(210.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            userScrollEnabled = false,
-        ) {
-            items(quickLinks) { link ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onNavigate(link.url) }) {
-                    Box(
-                        Modifier.size(58.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(18.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) { Text(link.symbol, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                    Text(link.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onProfile, modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = .7f), RoundedCornerShape(50))) {
+                    Icon(Icons.Default.Person, "Profile and workspaces", tint = NebulaPurple)
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onNotifications, modifier = Modifier.size(42.dp)) {
+                    Icon(Icons.Default.NotificationsNone, "Downloads and activity", tint = MaterialTheme.colorScheme.onBackground)
                 }
             }
-        }
-        if (state.settings.showRecentCard && state.history.isNotEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Continue browsing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    state.history.take(4).forEach { entry ->
-                        Row(Modifier.fillMaxWidth().clickable { onNavigate(entry.url) }.padding(vertical = 10.dp)) {
-                            Icon(Icons.Default.History, null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(entry.url, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Spacer(Modifier.height(8.dp))
+                NebulaMark(Modifier.size(72.dp))
+                Text("NEBULA", fontSize = 38.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onBackground)
+                Text("Browse beyond boundaries", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(22.dp))
+            OutlinedTextField(
+                value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth().height(78.dp),
+                placeholder = { Text("Search or enter address…", fontSize = 16.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(24.dp), tint = NebulaPurple) },
+                trailingIcon = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onVoice, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Mic, "Voice search", tint = NebulaPurple) }
+                        IconButton(onClick = onScanQr, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.QrCodeScanner, "Scan QR", tint = NebulaCyan) }
+                    }
+                },
+                singleLine = true, shape = RoundedCornerShape(28.dp),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = NebulaPurple, unfocusedBorderColor = NebulaPurple.copy(alpha = .75f),
+                    focusedContainerColor = Color(0xCC100A20), unfocusedContainerColor = Color(0xB0100A20),
+                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { if (query.isNotBlank()) onNavigate(query) }),
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                GlassCard(Modifier.weight(1f).height(46.dp), radius = 16.dp, onClick = { onNavigate("10 km to mi") }) {
+                    Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                        Icon(Icons.Default.Calculate, null, tint = NebulaPurple); Spacer(Modifier.width(7.dp)); Text("Smart Calculator", fontSize = 13.sp, maxLines = 1)
+                    }
+                }
+                GlassCard(Modifier.weight(1f).height(46.dp), radius = 16.dp, onClick = onExtensions) {
+                    Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                        Icon(Icons.Default.Extension, null, tint = NebulaCyan); Spacer(Modifier.width(7.dp)); Text("Extension Lab", fontSize = 13.sp, maxLines = 1)
                     }
                 }
             }
+            Spacer(Modifier.height(18.dp))
+            val shortcuts = state.settings.shortcuts
+            val itemCount = shortcuts.size + 1
+            val rows = (itemCount + 3) / 4
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(4), modifier = Modifier.fillMaxWidth().height((rows * 116).dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), userScrollEnabled = false,
+            ) {
+                items(shortcuts, key = { it.id }) { shortcut ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            Modifier.size(iconSize).clip(RoundedCornerShape(22.dp)).background(
+                                Brush.radialGradient(listOf(Color(shortcut.color).copy(alpha = .24f), Color(0xFF171022)))
+                            ).border(1.dp, NebulaOutline, RoundedCornerShape(22.dp)).combinedClickable(
+                                onClick = { onNavigate(shortcut.url) }, onLongClick = { editId = shortcut.id },
+                            ), contentAlignment = Alignment.Center,
+                        ) {
+                            Text(shortcut.symbol.take(2), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Color(shortcut.color))
+                        }
+                        Text(shortcut.title, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
+                    }
+                }
+                item {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            Modifier.size(iconSize).clip(RoundedCornerShape(22.dp)).background(Color(0x801A112A)).border(1.dp, NebulaOutline, RoundedCornerShape(22.dp)).clickable { addDialog = true },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Default.Add, "Add website", tint = NebulaPurple, modifier = Modifier.size(30.dp)) }
+                        Text("Add Site", fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                    }
+                }
+            }
+            if (tipVisible) GlassCard(Modifier.fillMaxWidth(), radius = 18.dp) {
+                Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Lightbulb, null, tint = NebulaPurple)
+                    Text("Try ‘gh android browser’, ‘45*12’, or ‘10 kg to lb’. Long-press a shortcut to arrange it.", modifier = Modifier.weight(1f).padding(horizontal = 10.dp), fontSize = 12.sp)
+                    IconButton(onClick = { tipVisible = false }) { Icon(Icons.Default.Close, "Dismiss tip", modifier = Modifier.size(18.dp)) }
+                }
+            }
+            if (state.settings.showRecentCard && state.history.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp)); SectionTitle("Continue browsing")
+                GlassCard(Modifier.fillMaxWidth()) {
+                    state.history.take(3).forEach { entry ->
+                        ListItem(
+                            headlineContent = { Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp) },
+                            supportingContent = { Text(entry.url, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp) },
+                            leadingContent = { Icon(Icons.Default.History, null, tint = NebulaPurple) },
+                            modifier = Modifier.clickable { onNavigate(entry.url) },
+                            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
         }
-        Spacer(Modifier.height(18.dp))
-        Text(
-            "Tip: use keywords like ‘gh android browser’, calculate ‘45*12’, or convert ‘10 kg to lb’.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+    }
+    if (addDialog) {
+        var title by remember { mutableStateOf("") }; var url by remember { mutableStateOf("https://") }
+        AlertDialog(
+            onDismissRequest = { addDialog = false }, title = { Text("Add website shortcut") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(title, { title = it }, label = { Text("Name") }, singleLine = true)
+                OutlinedTextField(url, { url = it }, label = { Text("Website URL") }, singleLine = true)
+            } },
+            confirmButton = { Button(onClick = { onAddShortcut(title, url); addDialog = false }) { Text("Add") } },
+            dismissButton = { TextButton(onClick = { addDialog = false }) { Text("Cancel") } },
         )
+    }
+    editId?.let { id ->
+        AlertDialog(
+            onDismissRequest = { editId = null }, title = { Text("Arrange shortcut") },
+            text = { Text("Move this shortcut or remove it from your home screen.") },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = { onMoveShortcut(id, -1) }) { Text("Move left") }
+                    TextButton(onClick = { onMoveShortcut(id, 1) }) { Text("Move right") }
+                    TextButton(onClick = { onRemoveShortcut(id); editId = null }) { Text("Remove") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { editId = null }) { Text("Done") } },
+        )
+    }
+}
+
+@Composable
+fun NebulaBottomBar(state: BrowserUiState, onBack: () -> Unit, onForward: () -> Unit, onHome: () -> Unit, onReload: () -> Unit, onTabs: () -> Unit) {
+    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).height(62.dp), radius = 26.dp) {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, enabled = state.canGoBack) { Icon(Icons.Default.ArrowBack, "Back") }
+            IconButton(onClick = onForward, enabled = state.canGoForward) { Icon(Icons.Default.ArrowForward, "Forward") }
+            Box(Modifier.size(46.dp).background(NebulaViolet, RoundedCornerShape(50)).clickable(onClick = onHome), contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, "Home", tint = Color.White) }
+            IconButton(onClick = onReload) { Icon(if (state.loading) Icons.Default.Close else Icons.Default.Refresh, "Reload or stop") }
+            Box(contentAlignment = Alignment.Center) {
+                IconButton(onClick = onTabs) { Icon(Icons.Default.Tab, "Tabs") }
+                Text(state.tabs.size.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+            }
+        }
     }
 }
 
@@ -271,55 +374,105 @@ fun TabSwitcher(
     onCloseOthers: (String) -> Unit,
     onRestore: () -> Unit,
     onBack: () -> Unit,
+    onRename: (String, String) -> Unit,
+    onGroup: (String, String?) -> Unit,
+    onMove: (String, String) -> Unit,
+    onDuplicate: (String) -> Unit,
+    onCloseAll: () -> Unit,
+    onForward: () -> Unit,
+    onReload: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    var actionTab by remember { mutableStateOf<BrowserTab?>(null) }
+    var selectedGroup by remember { mutableStateOf<String?>(null) }
+    val workspaceTabs = state.tabs.filter { it.workspaceId == state.activeWorkspaceId }
+    val groups = workspaceTabs.mapNotNull { it.groupName }.distinct()
+    val tabs = workspaceTabs.filter { selectedGroup == null || it.groupName == selectedGroup }
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+        Row(Modifier.height(60.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
-            Text("Workspaces & tabs", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Text("Workspaces & tabs", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             TextButton(onClick = onRestore) { Text("Restore") }
-            IconButton(onClick = { onNew(false) }) { Icon(Icons.Default.Add, "New tab") }
+            IconButton(onClick = { onNew(false) }) { Icon(Icons.Default.Add, "New tab", tint = NebulaPurple) }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(state.workspaces) { workspace ->
                 FilterChip(
-                    selected = state.activeWorkspaceId == workspace.id,
-                    onClick = { onWorkspace(workspace.id) },
-                    label = { Text(workspace.name) },
+                    selected = state.activeWorkspaceId == workspace.id, onClick = { onWorkspace(workspace.id); selectedGroup = null },
+                    label = { Text(workspace.name, fontSize = 13.sp) }, modifier = Modifier.height(44.dp),
+                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = NebulaViolet),
                 )
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onNew(false) }, modifier = Modifier.weight(1f)) { Text("New tab") }
-            TextButton(onClick = { onNew(true) }, modifier = Modifier.weight(1f)) { Text("Private tab") }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            NeonButton("New tab", { onNew(false) }, Modifier.weight(1f)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(5.dp)) }
+            GlassCard(Modifier.weight(1f).height(50.dp), radius = 18.dp, onClick = { onNew(true) }) {
+                Row(Modifier.fillMaxSize(), Arrangement.Center, Alignment.CenterVertically) { Icon(Icons.Default.Lock, null, tint = NebulaPurple); Spacer(Modifier.width(7.dp)); Text("Private tab") }
+            }
         }
-        val tabs = state.tabs.filter { it.workspaceId == state.activeWorkspaceId }
-        LazyVerticalGrid(modifier = Modifier.weight(1f), columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (groups.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            item { FilterChip(selected = selectedGroup == null, onClick = { selectedGroup = null }, label = { Text("All groups") }) }
+            items(groups) { group -> FilterChip(selected = selectedGroup == group, onClick = { selectedGroup = group }, label = { Text(group) }) }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("${tabs.size} tabs · long-press for group actions", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = onCloseAll) { Text("Close unpinned", fontSize = 12.sp) }
+        }
+        LazyVerticalGrid(
+            modifier = Modifier.weight(1f), columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             items(tabs, key = BrowserTab::id) { tab ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().height(190.dp).clickable { onSelect(tab.id) },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (tab.id == state.activeTabId) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    ),
+                GlassCard(
+                    Modifier.fillMaxWidth().height(242.dp).combinedClickable(onClick = { onSelect(tab.id) }, onLongClick = { actionTab = tab }),
+                    active = tab.id == state.activeTabId, radius = 20.dp,
                 ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (tab.isPrivate) "●" else "○", color = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(6.dp))
-                            Text(tab.title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                            IconButton(onClick = { onClose(tab.id) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Close, "Close", modifier = Modifier.size(18.dp)) }
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(7.dp).background(if (tab.isPrivate) NebulaPurple else NebulaCyan, RoundedCornerShape(50)))
+                        Spacer(Modifier.width(6.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(tab.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            tab.groupName?.let { Text(it, fontSize = 10.sp, color = NebulaPurple, maxLines = 1) }
                         }
-                        Box(Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                            Text(if (tab.isPrivate) "PRIVATE" else tab.url.substringAfter("://").substringBefore('/').ifBlank { "NEW TAB" }, style = MaterialTheme.typography.labelLarge)
+                        IconButton(onClick = { onClose(tab.id) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Close, "Close", modifier = Modifier.size(18.dp)) }
+                    }
+                    val preview = remember(tab.previewPath) { tab.previewPath?.let { android.graphics.BitmapFactory.decodeFile(it) } }
+                    Box(Modifier.fillMaxWidth().height(112.dp).padding(horizontal = 8.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF090612)), contentAlignment = Alignment.Center) {
+                        if (preview != null) Image(preview.asImageBitmap(), "Preview of ${tab.title}", modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                        else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            NebulaMark(Modifier.size(52.dp))
+                            Text(tab.url.substringAfter("://").substringBefore('/').ifBlank { "New tab" }, fontSize = 11.sp, maxLines = 1)
                         }
-                        Row {
-                            IconButton(onClick = { onPin(tab.id) }) { Icon(Icons.Default.PushPin, if (tab.isPinned) "Unpin" else "Pin") }
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { onCloseOthers(tab.id) }) { Text("Close others") }
-                        }
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { onPin(tab.id) }) { Icon(Icons.Default.PushPin, if (tab.isPinned) "Unpin" else "Pin", tint = if (tab.isPinned) NebulaPurple else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        TextButton(onClick = { onCloseOthers(tab.id) }, modifier = Modifier.weight(1f)) { Text("Close others", fontSize = 11.sp) }
                     }
                 }
             }
         }
+        NebulaBottomBar(state, onBack, onForward, onBack, onReload) { }
+    }
+    actionTab?.let { tab ->
+        var title by remember(tab.id) { mutableStateOf(tab.title) }
+        var group by remember(tab.id) { mutableStateOf(tab.groupName.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { actionTab = null }, title = { Text("Tab & group actions") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(title, { title = it }, label = { Text("Tab name") }, singleLine = true)
+                    OutlinedTextField(group, { group = it }, label = { Text("Group name (optional)") }, singleLine = true)
+                    Text("Move to workspace", fontWeight = FontWeight.SemiBold)
+                    state.workspaces.forEach { workspace -> TextButton(onClick = { onMove(tab.id, workspace.id); actionTab = null }) { Text(workspace.name) } }
+                }
+            },
+            confirmButton = { Button(onClick = { onRename(tab.id, title); onGroup(tab.id, group); actionTab = null }) { Text("Save") } },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { onDuplicate(tab.id); actionTab = null }) { Text("Duplicate") }
+                    TextButton(onClick = { onClose(tab.id); actionTab = null }) { Text("Close") }
+                }
+            },
+        )
     }
 }
 

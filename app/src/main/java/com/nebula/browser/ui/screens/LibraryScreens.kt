@@ -65,6 +65,7 @@ fun LibraryTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> 
         title = { Text(title) },
         navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } },
         actions = { actions() },
+        colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
     )
 }
 
@@ -73,7 +74,7 @@ fun LibraryTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> 
 fun HistoryScreen(state: BrowserUiState, onBack: () -> Unit, onOpen: (String) -> Unit, onDelete: (Long) -> Unit, onClear: () -> Unit) {
     var query by remember { mutableStateOf("") }
     val entries = state.history.filter { query.isBlank() || it.title.contains(query, true) || it.url.contains(query, true) }
-    Scaffold(topBar = {
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = {
         LibraryTopBar("History", onBack) { TextButton(onClick = onClear) { Text("Clear all") } }
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -116,7 +117,7 @@ fun BookmarksScreen(
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(onImport) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri -> uri?.let(onExport) }
     val bookmarks = state.bookmarks.filter { query.isBlank() || it.title.contains(query, true) || it.url.contains(query, true) || it.tags.contains(query, true) }
-    Scaffold(topBar = {
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = {
         LibraryTopBar("Bookmarks", onBack) {
             IconButton(onClick = { importLauncher.launch(arrayOf("text/html", "application/xhtml+xml")) }) { Icon(Icons.Default.FileUpload, "Import") }
             IconButton(onClick = { exportLauncher.launch("nebula-bookmarks.html") }) { Icon(Icons.Default.FileOpen, "Export") }
@@ -150,8 +151,10 @@ fun DownloadsScreen(
     onCancel: (Long) -> Unit,
     onRemove: (Long) -> Unit,
     onRetry: (com.nebula.browser.core.DownloadItem) -> Unit,
+    onOpenExternal: (Long) -> Unit,
+    onShare: (Long) -> Unit,
 ) {
-    Scaffold(topBar = {
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = {
         LibraryTopBar("Downloads", onBack) { IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh") } }
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -174,6 +177,8 @@ fun DownloadsScreen(
                             if (item.status == DownloadStatus.SUCCESSFUL) TextButton(onClick = { onOpen(item.id) }) { Text("Open") }
                             if (item.status == DownloadStatus.RUNNING || item.status == DownloadStatus.QUEUED) TextButton(onClick = { onCancel(item.id) }) { Text("Cancel") }
                             if (item.status == DownloadStatus.FAILED || item.status == DownloadStatus.CANCELLED) TextButton(onClick = { onRetry(item) }) { Text("Retry") }
+                            TextButton(onClick = { onShare(item.id) }) { Text("Share") }
+                            TextButton(onClick = { onOpenExternal(item.id) }) { Text("Open with") }
                             TextButton(onClick = { onRemove(item.id) }) { Text("Remove") }
                         }
                     }
@@ -189,7 +194,7 @@ fun ExtensionsScreen(state: BrowserUiState, onBack: () -> Unit, onImport: (andro
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { onImport(it, it.lastPathSegment?.substringAfterLast('/') ?: "extension") }
     }
-    Scaffold(topBar = {
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = {
         LibraryTopBar("Extension compatibility lab", onBack) { TextButton(onClick = onClear) { Text("Clear") } }
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

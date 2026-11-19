@@ -1,0 +1,4 @@
+<paths>
+    <external-path name="downloads" path="Download/Nebula/" />
+    <files-path name="app_files" path="." />
+</paths>

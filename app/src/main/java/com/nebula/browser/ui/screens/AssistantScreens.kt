@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -62,7 +63,7 @@ fun ReaderScreen(title: String, text: String, onBack: () -> Unit, onAskAi: () ->
         engine
     }
     DisposableEffect(Unit) { onDispose { tts.stop(); tts.shutdown() } }
-    Scaffold(topBar = {
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent, topBar = {
         LibraryTopBar("Reader mode", onBack) {
             IconButton(onClick = {
                 if (speaking) { tts.stop(); speaking = false } else {
@@ -97,6 +98,7 @@ fun AiAssistantSheet(
     onOpenSettings: () -> Unit,
 ) {
     var question by remember { mutableStateOf("") }
+    val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Nebula page intelligence", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -107,14 +109,26 @@ fun AiAssistantSheet(
             } else {
                 OutlinedTextField(question, { question = it }, Modifier.fillMaxWidth(), label = { Text("Ask about this page") }, minLines = 2)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onAsk(question.ifBlank { "Summarize the key points of this page." }) }, enabled = !loading) { Text("Review & send") }
-                    OutlinedButton(onClick = { onAsk("Summarize this page with concise bullet points and important caveats.") }, enabled = !loading) { Text("Summarize") }
+                    AssistChip(onClick = { onAsk("Summarize with concise bullets and caveats.") }, label = { Text("Summarize") }, enabled = !loading)
+                    AssistChip(onClick = { onAsk("Explain this page in simple language, preserving important nuances.") }, label = { Text("Explain") }, enabled = !loading)
+                    AssistChip(onClick = { onAsk("Extract key facts, dates, numbers and unresolved questions.") }, label = { Text("Key facts") }, enabled = !loading)
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(onClick = { onAsk("Translate the main content of this page into natural Bengali.") }, label = { Text("বাংলা") }, enabled = !loading)
+                    AssistChip(onClick = { onAsk("Create five thoughtful research questions and suggest search queries to verify this page.") }, label = { Text("Research") }, enabled = !loading)
+                }
+                Button(onClick = { onAsk(question.ifBlank { "Summarize the key points of this page." }) }, enabled = !loading) { Text("Review & send") }
                 if (loading) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(); Text("  Waiting for your provider…") }
                 if (response.isNotBlank()) {
                     HorizontalDivider()
                     SelectionContainer { Text(response) }
-                    TextButton(onClick = onClear) { Text("Clear response") }
+                    Row {
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Nebula AI response", response))
+                        }) { Text("Copy") }
+                        TextButton(onClick = onClear) { Text("Clear response") }
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))

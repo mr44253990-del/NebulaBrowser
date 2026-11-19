@@ -3,6 +3,9 @@ package com.nebula.browser
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebView
+import android.os.Environment
+import java.io.File
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nebula.browser.browser.DownloadController
@@ -16,6 +19,8 @@ import com.nebula.browser.core.DownloadItem
 import com.nebula.browser.core.ExtensionReport
 import com.nebula.browser.core.HistoryEntry
 import com.nebula.browser.core.HistoryRepository
+import com.nebula.browser.core.HomeShortcut
+import com.nebula.browser.core.TabRepository
 import com.nebula.browser.core.NebulaDatabase
 import com.nebula.browser.core.PasswordCredential
 import com.nebula.browser.core.PasswordVault
@@ -28,6 +33,7 @@ import com.nebula.browser.core.Workspace
 import com.nebula.browser.engine.BrowserSession
 import com.nebula.browser.engine.EngineEvent
 import com.nebula.browser.engine.EnginePrivacyConfig
+import com.nebula.browser.engine.SitePermissionRequest
 import com.nebula.browser.engine.WebViewEngine
 import com.nebula.browser.feature.ai.AiAssistant
 import com.nebula.browser.feature.extensions.ExtensionCompatibilityAnalyzer
@@ -76,6 +82,10 @@ data class BrowserUiState(
     val aiLoading: Boolean = false,
     val aiResponse: String = "",
     val aiConsent: PendingAiRequest? = null,
+    val pendingPermission: SitePermissionRequest? = null,
+    val developerOutput: String = "",
+    val consoleMessages: List<String> = emptyList(),
+    val openedFile: DownloadItem? = null,
 ) {
     val activeTab: BrowserTab? get() = tabs.firstOrNull { it.id == activeTabId }
     val isHome: Boolean get() = currentUrl.isBlank()
@@ -92,6 +102,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val database = NebulaDatabase.get(application)
     private val bookmarkRepository = BookmarkRepository(database.bookmarks())
     private val historyRepository = HistoryRepository(database.history())
+    private val tabRepository = TabRepository(database.tabs())
     private val settingsRepository = SettingsRepository(application)
     private val secrets = SecretStore(application)
     private val vault = PasswordVault(secrets)
@@ -116,6 +127,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             settingsRepository.settings.collectLatest { settings ->
                 _state.update { it.copy(settings = settings) }
                 sessions.values.forEach { it.setJavaScriptEnabled(settings.javaScriptEnabled) }
+                WebView.setWebContentsDebuggingEnabled(settings.developerMode)
             }
         }
         viewModelScope.launch { bookmarkRepository.bookmarks.collectLatest { list -> _state.update { it.copy(bookmarks = list) } } }
@@ -125,7 +137,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 _state.update { it.copy(downloads = list) }
             }
         }
-        createTab()
+        restoreSavedTabs()
         refreshDownloads()
     }
 
@@ -133,6 +145,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun createTab(privateMode: Boolean = false, url: String = "", workspaceId: String = _state.value.activeWorkspaceId) {
         val tab = BrowserTab(isPrivate = privateMode, workspaceId = workspaceId)
+        viewModelScope.launch(Dispatchers.IO) { tabRepository.save(tab) }
         sessions[tab.id] = engine.createSession(tab.id, privateMode).also(::observeSession)
         _state.update {
             it.copy(
@@ -151,8 +164,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectTab(id: String) {
+        if (_state.value.activeTabId != id) persistSession(_state.value.activeTabId)
         val tab = _state.value.tabs.firstOrNull { it.id == id } ?: return
         val session = sessions[id]
+        updateTab(id) { it.copy(lastOpenedAt = System.currentTimeMillis()) }
         _state.update {
             it.copy(
                 activeTabId = id,
@@ -161,6 +176,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 currentTitle = tab.title,
                 canGoBack = session?.canGoBack == true,
                 canGoForward = session?.canGoForward == true,
+                desktopMode = tab.desktopMode,
                 readerVisible = false,
             )
         }
@@ -169,6 +185,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun closeTab(id: String) {
         val tab = _state.value.tabs.firstOrNull { it.id == id } ?: return
         sessions.remove(id)?.destroy()
+        sessionFile(id).delete()
+        viewModelScope.launch(Dispatchers.IO) { tabRepository.delete(id) }
         if (tab.url.isNotBlank()) recentlyClosed += tab
         val remaining = _state.value.tabs.filterNot { it.id == id }
         if (remaining.isEmpty()) {
@@ -234,7 +252,43 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         val enabled = !_state.value.desktopMode
         activeSession()?.setDesktopMode(enabled)
         activeSession()?.reload()
+        _state.value.activeTabId.takeIf { it.isNotBlank() }?.let { id -> updateTab(id) { it.copy(desktopMode = enabled) } }
         _state.update { it.copy(desktopMode = enabled) }
+    }
+
+    fun renameTab(id: String, title: String) {
+        if (title.isNotBlank()) updateTab(id) { it.copy(title = title.trim().take(80)) }
+    }
+
+    fun setTabGroup(id: String, group: String?) {
+        updateTab(id) { it.copy(groupName = group?.trim()?.take(40)?.ifBlank { null }) }
+    }
+
+    fun moveTabToWorkspace(id: String, workspaceId: String) {
+        updateTab(id) { it.copy(workspaceId = workspaceId) }
+    }
+
+    fun closeAllInWorkspace() {
+        val workspace = _state.value.activeWorkspaceId
+        _state.value.tabs.filter { it.workspaceId == workspace && !it.isPinned }.toList().forEach { closeTab(it.id) }
+    }
+
+    fun addShortcut(title: String, url: String) {
+        if (title.isBlank() || !(url.startsWith("http://") || url.startsWith("https://"))) return message("Enter a title and a valid HTTP(S) URL")
+        val shortcut = HomeShortcut("custom_${System.currentTimeMillis()}", title.trim(), url, title.trim().take(1).uppercase())
+        updateSettings { it.copy(shortcuts = it.shortcuts + shortcut) }
+    }
+
+    fun removeShortcut(id: String) = updateSettings { it.copy(shortcuts = it.shortcuts.filterNot { shortcut -> shortcut.id == id }) }
+    fun moveShortcut(id: String, delta: Int) = updateSettings { settings ->
+        val index = settings.shortcuts.indexOfFirst { it.id == id }
+        val target = (index + delta).coerceIn(0, settings.shortcuts.lastIndex)
+        if (index < 0) settings else {
+            val mutable = settings.shortcuts.toMutableList()
+            val item = mutable.removeAt(index)
+            mutable.add(target, item)
+            settings.copy(shortcuts = mutable)
+        }
     }
 
     fun findInPage(query: String) {
@@ -307,8 +361,40 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun openDownload(id: Long) {
+        val item = _state.value.downloads.firstOrNull { it.id == id } ?: return
+        if (item.fileName.substringAfterLast('.', "").lowercase() in BUILT_IN_FILE_TYPES) {
+            _state.update { it.copy(openedFile = item) }
+        } else openDownloadExternally(id)
+    }
+
+    fun openDownloadExternally(id: Long) = viewModelScope.launch {
         val intent = downloadController.openIntent(id)
         if (intent == null) message("The downloaded file is not available") else _effects.tryEmit(UiEffect.OpenExternal(intent))
+    }
+
+    fun shareDownload(id: Long) = viewModelScope.launch {
+        val intent = downloadController.shareIntent(id)
+        if (intent == null) message("The downloaded file is not available") else _effects.tryEmit(UiEffect.OpenExternal(intent))
+    }
+
+    fun closeFileViewer() = _state.update { it.copy(openedFile = null) }
+
+    fun resolveSitePermission(granted: Boolean) {
+        val request = _state.value.pendingPermission ?: return
+        if (granted) request.grant() else request.deny()
+        _state.update { it.copy(pendingPermission = null) }
+    }
+
+    fun runDeveloperScript(script: String) {
+        if (!_state.value.settings.developerMode) return message("Enable Developer Mode first")
+        activeSession()?.evaluateJavaScript(script) { result ->
+            _state.update { it.copy(developerOutput = result ?: "No return value") }
+        }
+    }
+
+    fun viewPageSource() {
+        val url = _state.value.currentUrl
+        if (url.startsWith("http")) navigate("view-source://$url")
     }
 
     fun refreshPasswords() {
@@ -390,6 +476,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun clearBrowsingData() {
         viewModelScope.launch {
             historyRepository.clear()
+            tabRepository.clear()
             sessions.values.forEach { it.destroy() }
             sessions.clear()
             engine.clearCache()
@@ -417,7 +504,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         ifActive(event.tabId) { copy(currentTitle = event.title) }
                     }
                     is EngineEvent.ProgressChanged -> ifActive(event.tabId) { copy(progress = event.progress) }
-                    is EngineEvent.LoadingChanged -> ifActive(event.tabId) { copy(loading = event.loading) }
+                    is EngineEvent.LoadingChanged -> {
+                        ifActive(event.tabId) { copy(loading = event.loading) }
+                        if (!event.loading) persistSession(event.tabId)
+                    }
                     is EngineEvent.NavigationStateChanged -> ifActive(event.tabId) {
                         copy(canGoBack = event.canBack, canGoForward = event.canForward)
                     }
@@ -431,6 +521,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     }
                     is EngineEvent.DownloadRequested -> requestDownload(event.url, event.fileName, event.mimeType)
                     is EngineEvent.BlockedRequest -> _state.update { it.copy(blockedRequests = it.blockedRequests + 1) }
+                    is EngineEvent.SitePermissionRequested -> _state.update { it.copy(pendingPermission = event.request) }
+                    is EngineEvent.ConsoleMessage -> if (_state.value.settings.developerMode) _state.update {
+                        it.copy(consoleMessages = (it.consoleMessages + "${event.source}:${event.line} — ${event.message}").takeLast(100))
+                    }
                     is EngineEvent.FileChooserRequested -> _effects.tryEmit(UiEffect.FileChooser(event))
                     is EngineEvent.ExternalRequest -> {
                         runCatching { Intent(Intent.ACTION_VIEW, Uri.parse(event.url)) }
@@ -454,6 +548,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         is EngineEvent.FileChooserRequested -> event.tabId
         is EngineEvent.ExternalRequest -> event.tabId
         is EngineEvent.BlockedRequest -> event.tabId
+        is EngineEvent.SitePermissionRequested -> event.request.tabId
+        is EngineEvent.ConsoleMessage -> event.tabId
     }
 
     private fun extractPageText(callback: (String?) -> Unit) {
@@ -464,16 +560,70 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun updateTab(id: String, transform: (BrowserTab) -> BrowserTab) {
-        _state.update { state -> state.copy(tabs = state.tabs.map { if (it.id == id) transform(it) else it }) }
+        _state.update { state -> state.copy(tabs = state.tabs.map {
+            if (it.id == id) transform(it).also { updated -> viewModelScope.launch(Dispatchers.IO) { tabRepository.save(updated) } } else it
+        }) }
     }
+
+    private fun restoreSavedTabs() {
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) { tabRepository.savedTabs() }.sortedBy { it.createdAt }
+            if (saved.isEmpty()) return@launch createTab()
+            saved.forEach { tab ->
+                val session = engine.createSession(tab.id, false).also(::observeSession)
+                sessions[tab.id] = session
+                session.setDesktopMode(tab.desktopMode)
+                val stateFile = sessionFile(tab.id)
+                if (stateFile.exists() && stateFile.length() in 1..12 * 1024 * 1024) session.restoreState(stateFile.readBytes())
+                else if (tab.url.isNotBlank()) session.loadUrl(tab.url)
+            }
+            _state.update { it.copy(tabs = saved) }
+            saved.maxByOrNull { it.lastOpenedAt }?.let { selectTab(it.id) } ?: saved.firstOrNull()?.let { selectTab(it.id) }
+        }
+    }
+
+    fun persistSessions() {
+        sessions.keys.toList().forEach(::persistSession)
+        sessions.values.forEach { it.flushCookies() }
+    }
+
+    private fun persistSession(id: String) {
+        val session = sessions[id] ?: return
+        val tab = _state.value.tabs.firstOrNull { it.id == id } ?: return
+        if (tab.isPrivate) return
+        runCatching {
+            session.saveState()?.let { bytes ->
+                if (bytes.size <= 12 * 1024 * 1024) {
+                    sessionFile(id).parentFile?.mkdirs()
+                    sessionFile(id).writeBytes(bytes)
+                }
+            }
+            session.capturePreview()?.let { bitmap ->
+                val preview = previewFile(id)
+                preview.parentFile?.mkdirs()
+                preview.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.WEBP_LOSSY, 72, it) }
+                if (tab.previewPath != preview.absolutePath) updateTab(id) { it.copy(previewPath = preview.absolutePath) }
+            }
+        }
+        val current = _state.value.tabs.firstOrNull { it.id == id } ?: tab
+        viewModelScope.launch(Dispatchers.IO) { tabRepository.save(current.copy(lastOpenedAt = if (id == _state.value.activeTabId) System.currentTimeMillis() else current.lastOpenedAt)) }
+    }
+
+    private fun sessionFile(id: String) = File(getApplication<Application>().filesDir, "sessions/$id.state")
+    private fun previewFile(id: String) = File(getApplication<Application>().filesDir, "previews/$id.webp")
 
     private fun ifActive(id: String, transform: BrowserUiState.() -> BrowserUiState) {
         if (_state.value.activeTabId == id) _state.update(transform)
     }
 
     override fun onCleared() {
+        sessions.values.forEach { it.flushCookies() }
         sessions.values.forEach { it.destroy() }
         sessions.clear()
         super.onCleared()
+    }
+
+    private companion object {
+        val BUILT_IN_FILE_TYPES = setOf("txt", "log", "json", "xml", "csv", "md", "html", "htm", "css", "js", "kt", "java", "py", "jpg", "jpeg", "png", "gif", "webp", "bmp", "pdf", "zip", "mp3", "wav", "ogg", "m4a", "mp4", "webm", "mkv", "3gp")
     }
 }
