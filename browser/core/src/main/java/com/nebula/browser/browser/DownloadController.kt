@@ -68,14 +68,14 @@ class DownloadController(context: Context, private val database: NebulaDatabase)
                     bytesDownloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)),
                     totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)),
                     error = if (status == DownloadStatus.FAILED) "Download error (code $reason)" else null,
-                ).toEntity())
+                ))
             }
         }
     }
 
     suspend fun cancel(id: Long) = withContext(Dispatchers.IO) {
         manager.remove(id)
-        dao.byId(id)?.let { dao.save(it.copy(status = DownloadStatus.CANCELLED.name).toEntity()) }
+        dao.byId(id)?.let { dao.save(it.copy(status = DownloadStatus.CANCELLED.name)) }
     }
 
     suspend fun remove(id: Long) = withContext(Dispatchers.IO) {
