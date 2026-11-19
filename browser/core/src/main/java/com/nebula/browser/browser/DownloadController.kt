@@ -64,7 +64,7 @@ class DownloadController(context: Context, private val database: NebulaDatabase)
                 }
                 val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
                 dao.save(stored.copy(
-                    status = status,
+                    status = status.name,
                     bytesDownloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)),
                     totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)),
                     error = if (status == DownloadStatus.FAILED) "Download error (code $reason)" else null,
