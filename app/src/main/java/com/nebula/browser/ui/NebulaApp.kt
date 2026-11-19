@@ -88,7 +88,6 @@ import com.nebula.browser.ui.components.FindBar
 import com.nebula.browser.ui.components.HomePage
 import com.nebula.browser.ui.components.NebulaBottomBar
 import com.nebula.browser.ui.components.SpaceBackground
-import com.nebula.browser.ui.components.NebulaViolet
 import com.nebula.browser.ui.components.TabGroupDock
 import com.nebula.browser.ui.components.BookmarkEditorDialog
 import com.nebula.browser.ui.components.QrCodeDialog
@@ -114,8 +113,16 @@ private enum class AppScreen { BROWSER, TABS, HISTORY, BOOKMARKS, DOWNLOADS, EXT
 @Composable
 fun NebulaApp(viewModel: BrowserViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    NebulaTheme(darkTheme = state.settings.darkTheme) {
-        NebulaAppContent(viewModel, state)
+    NebulaTheme(
+        darkTheme = state.settings.darkTheme,
+        dynamicColors = state.settings.dynamicColors,
+        accentColor = state.settings.accentColor,
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.nebula.browser.ui.motion.LocalReduceMotion provides state.settings.reduceMotion,
+        ) {
+            NebulaAppContent(viewModel, state)
+        }
     }
 }
 
@@ -320,12 +327,23 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                     }
                 )
             }
-            if (screen == AppScreen.BROWSER && !state.isHome) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = screen == AppScreen.BROWSER && !state.isHome,
+                enter = androidx.compose.animation.scaleIn(
+                    initialScale = 0.6f,
+                    animationSpec = androidx.compose.animation.core.spring(
+                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+                    ),
+                ) + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.scaleOut(targetScale = 0.6f) + androidx.compose.animation.fadeOut(),
+                modifier = Modifier.align(Alignment.BottomEnd),
+            ) {
                 androidx.compose.material3.FloatingActionButton(
                     onClick = { viewModel.showToolbar(); scope.launch { drawerState.open() } },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 76.dp).size(42.dp),
-                    containerColor = NebulaViolet,
-                ) { Icon(Icons.Default.MoreVert, "Open browser menu", tint = androidx.compose.ui.graphics.Color.White) }
+                    modifier = Modifier.padding(end = 14.dp, bottom = 76.dp).size(42.dp),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                ) { Icon(Icons.Default.MoreVert, "Open browser menu", tint = MaterialTheme.colorScheme.onPrimary) }
             }
         }
         }

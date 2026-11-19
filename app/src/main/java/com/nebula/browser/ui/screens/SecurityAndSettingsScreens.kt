@@ -3,8 +3,11 @@ package com.nebula.browser.ui.screens
 import androidx.biometric.BiometricPrompt
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,9 +15,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -265,6 +271,24 @@ fun SettingsScreen(
             item { SettingSwitch("Home tips", "Show or hide the smart-search tip card.", state.settings.homeShowTips) { enabled -> onSettings { it.copy(homeShowTips = enabled) } } }
             item { SettingSwitch("Live download notifications", "Percentage, speed, ETA and waiting-for-network status from the download monitor.", state.settings.downloadNotifications) { enabled -> onSettings { it.copy(downloadNotifications = enabled) } } }
             item { HorizontalDivider() }
+            item { Text("Theme & motion", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+            item { SettingSwitch("Dynamic color", if (android.os.Build.VERSION.SDK_INT >= 31) "Follow your wallpaper palette with Material You." else "Needs Android 12 or newer. The Nebula palette is used on this device.", state.settings.dynamicColors) { enabled -> onSettings { it.copy(dynamicColors = enabled) } } }
+            item { GlassCard { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Accent color", fontWeight = FontWeight.SemiBold)
+                Text("Retints buttons, highlights and glass borders. Ignored while dynamic color is on.", style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    com.nebula.browser.ui.NebulaAccents.all.forEach { accent ->
+                        FilterChip(
+                            selected = !state.settings.dynamicColors && state.settings.accentColor == accent.id,
+                            onClick = { onSettings { it.copy(accentColor = accent.id) } },
+                            label = { Text(accent.label, fontSize = 11.sp) },
+                            leadingIcon = { Box(Modifier.size(12.dp).background(accent.swatch, CircleShape)) },
+                        )
+                    }
+                }
+            } } }
+            item { SettingSwitch("Reduce motion", "Shortens transitions and stills the animated background.", state.settings.reduceMotion) { enabled -> onSettings { it.copy(reduceMotion = enabled) } } }
+            item { HorizontalDivider() }
             item { Text("Search", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -290,7 +314,7 @@ fun SettingsScreen(
             }, modifier = Modifier.fillMaxWidth()) { Text("Save AI configuration securely") } }
             item { Text("The API key is encrypted with Android Keystore. Nebula sends page content directly to your configured provider; it has no Nebula server.", style = MaterialTheme.typography.bodySmall) }
             item { HorizontalDivider() }
-            item { Text("Nebula Browser 1.0.0\nChromium System WebView · Kotlin · Material 3\nNo account, analytics, or remote browser-data collection.") }
+            item { Text("Nebula Browser ${com.nebula.browser.BuildConfig.VERSION_NAME}\nChromium System WebView · Kotlin · Material 3\nNo account, analytics, or remote browser-data collection.") }
         }
     }
 

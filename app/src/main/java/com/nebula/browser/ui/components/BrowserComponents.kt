@@ -205,17 +205,20 @@ fun WebSessionView(session: BrowserSession?) {
 }
 
 @Composable
-private fun NebulaMark(modifier: Modifier = Modifier) {
+private fun NebulaMark(modifier: Modifier = Modifier, pulse: () -> Float = { 1f }) {
+    val purple = MaterialTheme.colorScheme.primary
+    val cyan = MaterialTheme.colorScheme.secondary
     androidx.compose.foundation.Canvas(modifier) {
+        val glow = pulse()
         val radius = size.minDimension / 2f
         val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
-        drawCircle(Brush.radialGradient(listOf(NebulaPurple.copy(alpha = .36f), Color.Transparent)), radius = radius * 1.45f, center = center)
+        drawCircle(Brush.radialGradient(listOf(purple.copy(alpha = .36f * glow), Color.Transparent)), radius = radius * 1.45f, center = center)
         withTransform({
             rotate(-17f, pivot = center)
             scale(1f, .42f, pivot = center)
         }) {
             drawOval(
-                Brush.linearGradient(listOf(NebulaPurple, NebulaCyan, Color(0xFF4E7CFF), NebulaPurple)),
+                Brush.linearGradient(listOf(purple, cyan, Color(0xFF4E7CFF), purple)),
                 topLeft = androidx.compose.ui.geometry.Offset(size.width * .03f, size.height * .14f),
                 size = androidx.compose.ui.geometry.Size(size.width * .94f, size.height * .72f),
                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5.dp.toPx()),
@@ -235,7 +238,7 @@ private fun NebulaMark(modifier: Modifier = Modifier) {
             center = androidx.compose.ui.geometry.Offset(center.x - radius * .22f, center.y - radius * .30f),
         )
         drawArc(
-            Brush.linearGradient(listOf(NebulaPurple, NebulaCyan, Color(0xFF6688FF))),
+            Brush.linearGradient(listOf(purple, cyan, Color(0xFF6688FF))),
             startAngle = 12f, sweepAngle = 166f, useCenter = false,
             topLeft = androidx.compose.ui.geometry.Offset(size.width * .03f, size.height * .32f),
             size = androidx.compose.ui.geometry.Size(size.width * .94f, size.height * .36f),
@@ -283,6 +286,7 @@ fun HomePage(
     var tipVisible by remember { mutableStateOf(true) }
     var searchFocused by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
+        val markPulse = com.nebula.browser.ui.motion.rememberPulse(periodMillis = 3_600)
         val iconSize = when {
             maxWidth <= 360.dp -> 64.dp
             maxWidth <= 400.dp -> 72.dp
@@ -302,7 +306,7 @@ fun HomePage(
             }
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(8.dp))
-                NebulaMark(Modifier.size(98.dp))
+                NebulaMark(Modifier.size(98.dp), pulse = { markPulse.value })
                 Text("NEBULA", fontSize = 38.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onBackground)
                 Text("Browse beyond boundaries", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -366,7 +370,7 @@ fun HomePage(
                     items(state.history.sortedByDescending { it.visitCount }.distinctBy { it.url.substringAfter("://").substringBefore('/') }.take(5), key = { "frequent_${it.id}" }) { entry ->
                         GlassCard(Modifier.width(156.dp).height(72.dp), radius = 18.dp, onClick = { onNavigate(entry.url) }) {
                             Row(Modifier.fillMaxSize().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(38.dp).background(NebulaViolet, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(38.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
                                     Text(entry.title.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                                 Spacer(Modifier.width(9.dp))
@@ -466,7 +470,7 @@ fun NebulaBottomBar(state: BrowserUiState, onBack: () -> Unit, onForward: () -> 
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack, enabled = state.canGoBack) { Icon(Icons.Default.ArrowBack, "Back", tint = if (state.canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
             IconButton(onClick = onForward, enabled = state.canGoForward) { Icon(Icons.Default.ArrowForward, "Forward", tint = if (state.canGoForward) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
-            Box(Modifier.size(46.dp).background(NebulaViolet, RoundedCornerShape(50)).clickable(onClick = onHome), contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, "Home", tint = Color.White) }
+            Box(Modifier.size(46.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).clickable(onClick = onHome), contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, "Home", tint = MaterialTheme.colorScheme.onPrimary) }
             IconButton(onClick = onReload) { Icon(if (state.loading) Icons.Default.Close else Icons.Default.Refresh, "Reload or stop", tint = MaterialTheme.colorScheme.onSurface) }
             Box(contentAlignment = Alignment.Center) {
                 IconButton(onClick = onTabs) { Icon(Icons.Default.Tab, "Tabs", tint = MaterialTheme.colorScheme.onSurface) }
@@ -522,7 +526,7 @@ fun TabSwitcher(
                 FilterChip(
                     selected = state.activeWorkspaceId == workspace.id, onClick = { onWorkspace(workspace.id); selectedGroup = null },
                     label = { Text(workspace.name, fontSize = 13.sp) }, modifier = Modifier.height(44.dp),
-                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = NebulaViolet, selectedLabelColor = Color.White, selectedLeadingIconColor = Color.White),
+                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = MaterialTheme.colorScheme.onPrimary, selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary),
                 )
             }
         }

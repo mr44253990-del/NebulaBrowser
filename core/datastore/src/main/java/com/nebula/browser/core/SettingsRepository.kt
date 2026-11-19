@@ -54,6 +54,9 @@ class SettingsRepository(private val context: Context) {
             preferences[Keys.TIPS] = next.homeShowTips
             preferences[Keys.BACKGROUND] = next.backgroundStyle
             preferences[Keys.DOWNLOAD_NOTIFICATIONS] = next.downloadNotifications
+            preferences[Keys.DYNAMIC_COLORS] = next.dynamicColors
+            preferences[Keys.ACCENT_COLOR] = next.accentColor
+            preferences[Keys.REDUCE_MOTION] = next.reduceMotion
         }
     }
 
@@ -86,6 +89,9 @@ class SettingsRepository(private val context: Context) {
         homeShowTips = p[Keys.TIPS] ?: true,
         backgroundStyle = p[Keys.BACKGROUND] ?: "nebula",
         downloadNotifications = p[Keys.DOWNLOAD_NOTIFICATIONS] ?: true,
+        dynamicColors = p[Keys.DYNAMIC_COLORS] ?: false,
+        accentColor = p[Keys.ACCENT_COLOR] ?: "violet",
+        reduceMotion = p[Keys.REDUCE_MOTION] ?: false,
     )
 
     private fun encodeEngines(engines: List<SearchEngine>): String = JSONArray().apply {
@@ -169,5 +175,8 @@ class SettingsRepository(private val context: Context) {
         val TIPS = booleanPreferencesKey("home_tips")
         val BACKGROUND = stringPreferencesKey("background_style")
         val DOWNLOAD_NOTIFICATIONS = booleanPreferencesKey("download_notifications")
+        val DYNAMIC_COLORS = booleanPreferencesKey("dynamic_colors")
+        val ACCENT_COLOR = stringPreferencesKey("accent_color")
+        val REDUCE_MOTION = booleanPreferencesKey("reduce_motion")
     }
 }

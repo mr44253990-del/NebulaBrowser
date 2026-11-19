@@ -115,6 +115,9 @@ data class BrowserSettings(
     val homeShowTips: Boolean = true,
     val backgroundStyle: String = "nebula",
     val downloadNotifications: Boolean = true,
+    val dynamicColors: Boolean = false,
+    val accentColor: String = "violet",
+    val reduceMotion: Boolean = false,
 )
 
 data class ExtensionReport(
