@@ -52,7 +52,7 @@ fun <T> motionSpring(
     dampingRatio: Float = Spring.DampingRatioMediumBouncy,
     stiffness: Float = Spring.StiffnessMediumLow,
 ): SpringSpec<T> = if (LocalReduceMotion.current) {
-    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessVeryHigh)
+    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
 } else {
     spring(dampingRatio = dampingRatio, stiffness = stiffness)
 }
