@@ -270,8 +270,8 @@ private class WebViewSession(
             scriptProvider().filter { it.enabled && it.code.length <= 1_000_000 && it.grants.all { grant -> grant == "none" } }
                 .filter { script -> script.matches.any { pattern -> matchesPattern(url, pattern) } }
                 .forEach { script ->
-                    val wrapped = "(function(){'use strict';try{${script.code}
-}catch(e){console.error('Nebula userscript ${script.name}: '+e.message);}})();"
+                    val wrapped = """(function(){'use strict';try{${script.code}
+}catch(e){console.error('Nebula userscript ${script.name}: '+e.message);}})();"""
                     webView.evaluateJavascript(wrapped, null)
                 }
         }
