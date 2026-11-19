@@ -31,6 +31,8 @@ interface BrowserSession {
     fun clearFind()
     fun printPage()
     fun capturePreview(): Bitmap?
+    /** Captures the visible viewport at full resolution, delivered on the UI thread. */
+    fun captureScreenshot(callback: (Bitmap?) -> Unit)
     fun saveState(): ByteArray?
     fun restoreState(data: ByteArray)
     fun flushCookies()

@@ -46,6 +46,7 @@ import com.nebula.browser.feature.ai.AgentStepStatus
 import com.nebula.browser.feature.ai.ReportExporter
 import com.nebula.browser.feature.extensions.ExtensionCompatibilityAnalyzer
 import com.nebula.browser.feature.extensions.UserScriptParser
+import com.nebula.browser.feature.tools.PageTools
 import com.nebula.browser.util.bookmarksFromHtml
 import com.nebula.browser.util.bookmarksToHtml
 import kotlinx.coroutines.Dispatchers
@@ -467,6 +468,93 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun viewPageSource() {
         val url = _state.value.currentUrl
         if (url.startsWith("http")) navigate("view-source://$url")
+    }
+
+    fun captureScreenshot() {
+        if (_state.value.currentUrl.isBlank()) return message("Open a page first")
+        val session = activeSession() ?: return message("Open a page first")
+        session.captureScreenshot { bitmap ->
+            if (bitmap == null) {
+                message("Could not capture this page")
+                return@captureScreenshot
+            }
+            viewModelScope.launch(Dispatchers.IO) {
+                val name = PageTools.saveScreenshot(getApplication(), bitmap)
+                message(if (name != null) "Screenshot saved: Download/Nebula/$name" else "Could not save the screenshot")
+            }
+        }
+    }
+
+    fun savePageText() {
+        if (_state.value.currentUrl.isBlank()) return message("Open a page first")
+        val title = _state.value.currentTitle
+        val url = _state.value.currentUrl
+        extractPageText { text ->
+            if (text.isNullOrBlank()) {
+                message("No readable text on this page")
+                return@extractPageText
+            }
+            viewModelScope.launch(Dispatchers.IO) {
+                val name = PageTools.savePageText(getApplication(), title, url, text)
+                message(if (name != null) "Page saved: Download/Nebula/$name" else "Could not save the page")
+            }
+        }
+    }
+
+    fun savePageHtml() {
+        if (_state.value.currentUrl.isBlank()) return message("Open a page first")
+        val title = _state.value.currentTitle
+        val session = activeSession() ?: return message("Open a page first")
+        session.evaluateJavaScript("(function(){return document.documentElement.outerHTML;})()") { html ->
+            if (html.isNullOrBlank()) {
+                message("Could not read this page")
+                return@evaluateJavaScript
+            }
+            viewModelScope.launch(Dispatchers.IO) {
+                val name = PageTools.savePageHtml(getApplication(), title, html)
+                message(if (name != null) "HTML saved: Download/Nebula/$name" else "Could not save the page")
+            }
+        }
+    }
+
+    fun copyPageText() {
+        if (_state.value.currentUrl.isBlank()) return message("Open a page first")
+        val label = _state.value.currentTitle
+        extractPageText { text ->
+            if (text.isNullOrBlank()) {
+                message("No readable text on this page")
+                return@extractPageText
+            }
+            val clipboard = getApplication<Application>().getSystemService(android.content.ClipboardManager::class.java)
+            clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+            message("Page text copied to the clipboard")
+        }
+    }
+
+    fun pauseDownload(id: Long) = viewModelScope.launch {
+        val paused = downloadController.pause(id)
+        message(if (paused) "Download paused" else "Android cannot pause this download")
+        runCatching { downloadController.refresh() }
+    }
+
+    fun resumeDownload(id: Long) = viewModelScope.launch {
+        val resumed = downloadController.resume(id)
+        message(if (resumed) "Download resumed" else "Android cannot resume this download")
+        runCatching { downloadController.refresh() }
+    }
+
+    fun clearSiteData() = viewModelScope.launch {
+        withContext(Dispatchers.IO) {
+            android.webkit.CookieManager.getInstance().removeAllCookies(null)
+            android.webkit.CookieManager.getInstance().flush()
+            android.webkit.WebStorage.getInstance().deleteAllData()
+        }
+        sessions.values.forEach { it.destroy() }
+        sessions.clear()
+        engine.clearCache()
+        _state.update { state -> state.copy(tabs = emptyList(), activeTabId = "") }
+        createTab()
+        message("Cookies, storage and site data cleared")
     }
 
     fun refreshPasswords() {

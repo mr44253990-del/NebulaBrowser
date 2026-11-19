@@ -208,6 +208,18 @@ private class WebViewSession(
         }.getOrNull()
     }
 
+    override fun captureScreenshot(callback: (Bitmap?) -> Unit) {
+        if (destroyed || webView.width <= 0 || webView.height <= 0) return callback(null)
+        webView.post {
+            val bitmap = runCatching {
+                Bitmap.createBitmap(webView.width, webView.height, Bitmap.Config.ARGB_8888).also { snapshot ->
+                    webView.draw(android.graphics.Canvas(snapshot))
+                }
+            }.getOrNull()
+            callback(bitmap)
+        }
+    }
+
     override fun saveState(): ByteArray? {
         if (destroyed) return null
         return runCatching {

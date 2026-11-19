@@ -188,6 +188,8 @@ fun DownloadsScreen(
     onRetry: (com.nebula.browser.core.DownloadItem) -> Unit,
     onOpenExternal: (Long) -> Unit,
     onShare: (Long) -> Unit,
+    onPause: (Long) -> Unit,
+    onResume: (Long) -> Unit,
 ) {
     var category by remember { mutableStateOf("All") }
     var selected by remember { mutableStateOf(setOf<Long>()) }
@@ -235,7 +237,14 @@ fun DownloadsScreen(
                         item.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (item.status == DownloadStatus.SUCCESSFUL) TextButton(onClick = { onOpen(item.id) }) { Text("Open") }
-                            if (item.status == DownloadStatus.RUNNING || item.status == DownloadStatus.QUEUED) TextButton(onClick = { onCancel(item.id) }) { Text("Cancel") }
+                            if (item.status == DownloadStatus.RUNNING || item.status == DownloadStatus.QUEUED) {
+                                TextButton(onClick = { onPause(item.id) }) { Text("Pause") }
+                                TextButton(onClick = { onCancel(item.id) }) { Text("Cancel") }
+                            }
+                            if (item.status == DownloadStatus.PAUSED) {
+                                TextButton(onClick = { onResume(item.id) }) { Text("Resume") }
+                                TextButton(onClick = { onCancel(item.id) }) { Text("Cancel") }
+                            }
                             if (item.status == DownloadStatus.FAILED || item.status == DownloadStatus.CANCELLED) TextButton(onClick = { onRetry(item) }) { Text("Retry") }
                             TextButton(onClick = { onShare(item.id) }) { Text("Share") }
                             TextButton(onClick = { onOpenExternal(item.id) }) { Text("Open with") }

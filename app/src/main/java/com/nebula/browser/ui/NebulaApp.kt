@@ -36,6 +36,10 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Code
@@ -244,6 +248,21 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
         com.nebula.browser.ui.sheets.CommandAction("Page QR code", "Share the current address as a QR", Icons.Default.QrCode) {
             showCommand = false; if (state.currentUrl.isNotBlank()) showQr = true; screen = AppScreen.BROWSER
         },
+        com.nebula.browser.ui.sheets.CommandAction("Screenshot", "Save the visible page as a PNG", Icons.Default.PhotoCamera) {
+            showCommand = false; viewModel.captureScreenshot(); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Save page text", "Export readable text into Download/Nebula", Icons.Default.SaveAlt) {
+            showCommand = false; viewModel.savePageText(); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Save page HTML", "Keep an offline copy of the markup", Icons.Default.Code) {
+            showCommand = false; viewModel.savePageHtml(); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Copy page text", "Put the whole article on the clipboard", Icons.Default.ContentCopy) {
+            showCommand = false; viewModel.copyPageText(); screen = AppScreen.BROWSER
+        },
+        com.nebula.browser.ui.sheets.CommandAction("Clear site data", "Delete cookies, storage and cache", Icons.Default.DeleteSweep) {
+            showCommand = false; viewModel.clearSiteData(); screen = AppScreen.BROWSER
+        },
         com.nebula.browser.ui.sheets.CommandAction("Password vault", "Encrypted credentials and generator", Icons.Default.Security) {
             showCommand = false; screen = AppScreen.PASSWORDS
         },
@@ -287,6 +306,9 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                     openScreen(AppScreen.BROWSER)
                 }
                 DrawerItem("Page QR code", Icons.Default.QrCode) { if (state.currentUrl.isNotBlank()) showQr = true; openScreen(AppScreen.BROWSER) }
+                DrawerItem("Screenshot", Icons.Default.PhotoCamera) { viewModel.captureScreenshot(); openScreen(AppScreen.BROWSER) }
+                DrawerItem("Save page text", Icons.Default.SaveAlt) { viewModel.savePageText(); openScreen(AppScreen.BROWSER) }
+                DrawerItem("Copy page text", Icons.Default.ContentCopy) { viewModel.copyPageText(); openScreen(AppScreen.BROWSER) }
                 DrawerItem("Privacy controls", Icons.Default.PrivacyTip) { openScreen(AppScreen.PRIVACY) }
                 if (state.settings.developerMode) DrawerItem("Developer console", Icons.Default.Code) { openScreen(AppScreen.DEVELOPER) }
                 DrawerItem("Settings", Icons.Default.Settings) { openScreen(AppScreen.SETTINGS) }
@@ -339,7 +361,7 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
                     )
                     screen == AppScreen.HISTORY -> HistoryScreen(state, { screen = AppScreen.BROWSER }, { viewModel.navigate(it); screen = AppScreen.BROWSER }, viewModel::deleteHistory, viewModel::clearHistory, viewModel::clearSearchHistory, viewModel::deleteSearchQuery)
                     screen == AppScreen.BOOKMARKS -> BookmarksScreen(state, { screen = AppScreen.BROWSER }, { viewModel.navigate(it); screen = AppScreen.BROWSER }, viewModel::deleteBookmark, viewModel::importBookmarks, viewModel::exportBookmarks)
-                    screen == AppScreen.DOWNLOADS -> DownloadsScreen(state, { screen = AppScreen.BROWSER }, viewModel::refreshDownloads, viewModel::openDownload, viewModel::cancelDownload, viewModel::removeDownload, viewModel::retryDownload, viewModel::openDownloadExternally, viewModel::shareDownload)
+                    screen == AppScreen.DOWNLOADS -> DownloadsScreen(state, { screen = AppScreen.BROWSER }, viewModel::refreshDownloads, viewModel::openDownload, viewModel::cancelDownload, viewModel::removeDownload, viewModel::retryDownload, viewModel::openDownloadExternally, viewModel::shareDownload, viewModel::pauseDownload, viewModel::resumeDownload)
                     screen == AppScreen.EXTENSIONS -> ExtensionsScreen(state, { screen = AppScreen.BROWSER }, viewModel::importExtension, viewModel::clearExtensionReports, viewModel::importUserScript, viewModel::toggleUserScript, viewModel::deleteUserScript)
                     screen == AppScreen.PASSWORDS -> PasswordsScreen(state, { screen = AppScreen.BROWSER }, viewModel::refreshPasswords, viewModel::savePassword, viewModel::deletePassword, viewModel::generatePassword)
                     screen == AppScreen.PRIVACY -> PrivacyScreen(state, { screen = AppScreen.BROWSER }, viewModel::updateSettings, viewModel::clearBrowsingData)
