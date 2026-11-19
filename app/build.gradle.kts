@@ -32,18 +32,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+        // Shared models are immutable holders from a plain Kotlin module; telling the
+        // compiler they are stable keeps Home, tabs and lists from recomposing widely.
+        freeCompilerArgs = freeCompilerArgs + listOf(
+            "-P",
+            "plugin:androidx.compose.compiler.plugins.kotlin:stabilityConfigurationPath=" +
+                project.file("compose_stability.conf").absolutePath,
+        )
+    }
     buildFeatures {
         compose = true
         buildConfig = true
     }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
-}
-
-composeCompiler {
-    // Shared models are immutable holders from a plain Kotlin module; telling the
-    // compiler they are stable keeps Home, tabs and lists from recomposing widely.
-    stabilityConfigurationFiles.add(file("compose_stability.conf"))
 }
 
 dependencies {
