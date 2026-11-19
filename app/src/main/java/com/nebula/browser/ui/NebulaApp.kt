@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -36,6 +37,8 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -66,6 +69,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -83,10 +87,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.nebula.browser.BrowserViewModel
+import com.nebula.browser.BuildConfig
 import com.nebula.browser.UiEffect
 import com.nebula.browser.ui.components.AddressBar
 import com.nebula.browser.ui.components.FindBar
@@ -279,41 +285,102 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = false, // Prevent accidental browser-navigation swipes from opening the drawer.
+        gesturesEnabled = drawerState.isOpen, // Swipe back to close; the page keeps its own swipes while closed.
         drawerContent = {
-            ModalDrawerSheet(modifier = androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-                Text("NEBULA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, modifier = Modifier.padding(22.dp), color = MaterialTheme.colorScheme.primary)
-                DrawerItem("Command center", Icons.Default.Bolt) { showCommand = true; scope.launch { drawerState.close() } }
-                DrawerItem("New tab", Icons.Default.Add) { viewModel.createTab(); openScreen(AppScreen.BROWSER) }
-                DrawerItem("New private tab", Icons.Default.Lock) { viewModel.createTab(privateMode = true); openScreen(AppScreen.BROWSER) }
-                DrawerItem("Tabs & workspaces", Icons.Default.Tab) { openScreen(AppScreen.TABS) }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                DrawerItem("Bookmarks", Icons.Default.Bookmark) { openScreen(AppScreen.BOOKMARKS) }
-                DrawerItem("History", Icons.Default.History) { openScreen(AppScreen.HISTORY) }
-                DrawerItem("Downloads", Icons.Default.Download) { openScreen(AppScreen.DOWNLOADS) }
-                DrawerItem("Password vault", Icons.Default.Security) { openScreen(AppScreen.PASSWORDS) }
-                DrawerItem("Extension lab", Icons.Default.Extension) { openScreen(AppScreen.EXTENSIONS) }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                DrawerItem("Add bookmark", Icons.Default.BookmarkAdd) { showBookmarkEditor = true; openScreen(AppScreen.BROWSER) }
-                DrawerItem("Reader mode", Icons.Default.FindInPage) { viewModel.showReader(); openScreen(AppScreen.BROWSER) }
-                DrawerItem("AI page assistant", Icons.Default.SmartToy) { showAi = true; openScreen(AppScreen.BROWSER) }
-                DrawerItem("Find in page", Icons.Default.FindInPage) { showFind = true; openScreen(AppScreen.BROWSER) }
-                DrawerItem("Desktop site: ${if (state.desktopMode) "on" else "off"}", Icons.Default.DesktopWindows) { viewModel.toggleDesktopMode(); openScreen(AppScreen.BROWSER) }
-                DrawerItem("Save / print PDF", Icons.Default.PictureAsPdf) { viewModel.printPage(); openScreen(AppScreen.BROWSER) }
-                DrawerItem("Share page", Icons.Default.Share) {
-                    runCatching {
-                        val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, state.currentUrl) }
-                        context.startActivity(Intent.createChooser(share, "Share page"))
+            var drawerQuery by remember { mutableStateOf("") }
+            val sections: List<Pair<String, List<DrawerEntry>>> = listOf(
+                "Navigate" to listOf(
+                    DrawerEntry("Command center", Icons.Default.Bolt) { showCommand = true; scope.launch { drawerState.close() } },
+                    DrawerEntry("New tab", Icons.Default.Add) { viewModel.createTab(); openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("New private tab", Icons.Default.Lock) { viewModel.createTab(privateMode = true); openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Tabs & workspaces", Icons.Default.Tab) { openScreen(AppScreen.TABS) },
+                ),
+                "Library" to listOf(
+                    DrawerEntry("Bookmarks", Icons.Default.Bookmark) { openScreen(AppScreen.BOOKMARKS) },
+                    DrawerEntry("History", Icons.Default.History) { openScreen(AppScreen.HISTORY) },
+                    DrawerEntry("Downloads", Icons.Default.Download) { openScreen(AppScreen.DOWNLOADS) },
+                    DrawerEntry("Password vault", Icons.Default.Security) { openScreen(AppScreen.PASSWORDS) },
+                    DrawerEntry("Extension lab", Icons.Default.Extension) { openScreen(AppScreen.EXTENSIONS) },
+                ),
+                "Page tools" to listOf(
+                    DrawerEntry("Add bookmark", Icons.Default.BookmarkAdd) { showBookmarkEditor = true; openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Reader mode", Icons.Default.FindInPage) { viewModel.showReader(); openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("AI page assistant", Icons.Default.SmartToy) { showAi = true; openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Find in page", Icons.Default.FindInPage) { showFind = true; openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Desktop site: ${if (state.desktopMode) "on" else "off"}", Icons.Default.DesktopWindows) { viewModel.toggleDesktopMode(); openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Save / print PDF", Icons.Default.PictureAsPdf) { viewModel.printPage(); openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Share page", Icons.Default.Share) {
+                        runCatching {
+                            val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, state.currentUrl) }
+                            context.startActivity(Intent.createChooser(share, "Share page"))
+                        }
+                        openScreen(AppScreen.BROWSER)
+                    },
+                    DrawerEntry("Page QR code", Icons.Default.QrCode) { if (state.currentUrl.isNotBlank()) showQr = true; openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Screenshot", Icons.Default.PhotoCamera) { viewModel.captureScreenshot(); openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Save page text", Icons.Default.SaveAlt) { viewModel.savePageText(); openScreen(AppScreen.BROWSER) },
+                    DrawerEntry("Copy page text", Icons.Default.ContentCopy) { viewModel.copyPageText(); openScreen(AppScreen.BROWSER) },
+                ),
+                "App" to buildList<DrawerEntry> {
+                    add(DrawerEntry("Privacy controls", Icons.Default.PrivacyTip) { openScreen(AppScreen.PRIVACY) })
+                    if (state.settings.developerMode) {
+                        add(DrawerEntry("Developer console", Icons.Default.Code) { openScreen(AppScreen.DEVELOPER) })
                     }
-                    openScreen(AppScreen.BROWSER)
+                    add(DrawerEntry("Settings", Icons.Default.Settings) { openScreen(AppScreen.SETTINGS) })
+                },
+            )
+            ModalDrawerSheet(
+                modifier = Modifier.fillMaxHeight(),
+                drawerShape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp),
+                drawerContainerColor = MaterialTheme.colorScheme.surface,
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("NEBULA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                        Text("Private by default", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { scope.launch { drawerState.close() } }) {
+                        Icon(Icons.Default.Close, "Close menu", tint = MaterialTheme.colorScheme.onSurface)
+                    }
                 }
-                DrawerItem("Page QR code", Icons.Default.QrCode) { if (state.currentUrl.isNotBlank()) showQr = true; openScreen(AppScreen.BROWSER) }
-                DrawerItem("Screenshot", Icons.Default.PhotoCamera) { viewModel.captureScreenshot(); openScreen(AppScreen.BROWSER) }
-                DrawerItem("Save page text", Icons.Default.SaveAlt) { viewModel.savePageText(); openScreen(AppScreen.BROWSER) }
-                DrawerItem("Copy page text", Icons.Default.ContentCopy) { viewModel.copyPageText(); openScreen(AppScreen.BROWSER) }
-                DrawerItem("Privacy controls", Icons.Default.PrivacyTip) { openScreen(AppScreen.PRIVACY) }
-                if (state.settings.developerMode) DrawerItem("Developer console", Icons.Default.Code) { openScreen(AppScreen.DEVELOPER) }
-                DrawerItem("Settings", Icons.Default.Settings) { openScreen(AppScreen.SETTINGS) }
+                OutlinedTextField(
+                    value = drawerQuery,
+                    onValueChange = { drawerQuery = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    placeholder = { Text("Find a tool or page", fontSize = 13.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                )
+                Column(Modifier.weight(1f).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    sections.forEach { (title, entries) ->
+                        val visible = entries.filter { drawerQuery.isBlank() || it.label.contains(drawerQuery, true) }
+                        if (visible.isNotEmpty()) {
+                            Text(
+                                title.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 2.dp),
+                            )
+                            visible.forEach { entry ->
+                                DrawerItem(entry.label, entry.icon) { entry.action() }
+                            }
+                        }
+                    }
+                    if (drawerQuery.isNotBlank() && sections.all { (_, entries) -> entries.none { it.label.contains(drawerQuery, true) } }) {
+                        Text("No matching tool", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                HorizontalDivider()
+                Text(
+                    "Nebula ${BuildConfig.VERSION_NAME} · no account, no analytics",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
             }
         },
     ) {
@@ -478,6 +545,12 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
         }
     }
 }
+
+private class DrawerEntry(
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val action: () -> Unit,
+)
 
 @Composable
 private fun DrawerItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
