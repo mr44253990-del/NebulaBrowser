@@ -12,16 +12,19 @@ android {
         applicationId = "com.nebula.browser"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "3.1.0"
+        versionCode = 6
+        versionName = "4.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // CI artifacts are signed with the debug key so the optimized APK stays installable.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -35,6 +38,12 @@ android {
         buildConfig = true
     }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+}
+
+composeCompiler {
+    // Shared models are immutable holders from a plain Kotlin module; telling the
+    // compiler they are stable keeps Home, tabs and lists from recomposing widely.
+    stabilityConfigurationFiles.add(file("compose_stability.conf"))
 }
 
 dependencies {

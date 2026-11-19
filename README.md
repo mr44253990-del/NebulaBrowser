@@ -17,19 +17,26 @@ A real, modular Android browser built with **Kotlin, Jetpack Compose, Material 3
 - Reader mode with selectable text, adjustable typography, reading-time estimate, and Android text-to-speech.
 - Optional OpenAI-compatible page assistant with HTTPS endpoint validation, encrypted API key, model/temperature controls, and an explicit page-sharing consent dialog.
 - Find in page, desktop user agent, page sharing, QR generation/scanning, voice search, and system Print/Save-as-PDF.
+- Dynamic Material You theming with six curated accents, a shared motion system with a reduce-motion switch, and a filterable Command Center that reaches every tool.
+- Screenshot capture, save page as Markdown or HTML, copy article text, clear cookies/site data, and copy download links. Exports land in `Download/Nebula`.
 - Voice and QR features depend on capabilities available on the device.
 
 ## APK from GitHub Actions
 
-Every push to `main`, pull request, or manual workflow dispatch runs unit tests and builds the debug APK. Download **`NebulaBrowser-debug-apk`** from the workflow run's **Artifacts** section. The APK is debug-signed for testing and is not a Play Store release.
+Every push to `main`, pull request, or manual workflow dispatch runs unit tests and builds two APKs:
+
+- **`NebulaBrowser-debug-apk`** — the fast debug build for testing.
+- **`NebulaBrowser-release-apk`** — R8-minified and resource-shrunk. It is signed with the debug key so it stays installable, and is not a Play Store release.
+
+Download either from the workflow run's **Artifacts** section. The run page also reports both APK sizes.
 
 To build manually:
 
 ```bash
-./gradlew testDebugUnitTest assembleDebug
+./gradlew testDebugUnitTest assembleDebug assembleRelease
 ```
 
-Output: `app/build/outputs/apk/debug/app-debug.apk`.
+Outputs: `app/build/outputs/apk/debug/app-debug.apk` and `app/build/outputs/apk/release/app-release.apk`.
 
 ## Project structure
 
@@ -82,6 +89,16 @@ See [the 2.0 research notes](docs/RESEARCH_2_0.md) for Android platform guidance
 - Approved safe AI research plans with real-time steps, up to 12 HTTPS sources, and local TXT/PDF report export.
 
 The AI agent is intentionally not an unrestricted arbitrary-action system. See the 3.0 research notes.
+
+## Nebula 4.0 experience update
+
+- Material You dynamic color on Android 12+, six curated accents, and theme-aware glass surfaces, chips and buttons.
+- A shared motion system (duration tokens, spring press feedback, pulsing mark, animated progress) with a system-friendly **Reduce motion** switch.
+- Command Center: a filterable sheet that reaches every screen and tool, opened from the bolt button on Home or the drawer.
+- Home shows a time-of-day greeting, live tab/bookmark counts and a live download card.
+- New page tools: screenshot, save as Markdown, save as HTML, copy article text, clear cookies/site data, and copy download links.
+- Release builds are R8-minified with resource shrinking and published next to the debug APK by CI.
+- Startup is faster: the System WebView provider is warmed on a background thread, and a Compose stability configuration keeps the shared models from triggering wide recomposition. Version 4.0.0 (versionCode 6).
 
 ## Privacy and limitations
 

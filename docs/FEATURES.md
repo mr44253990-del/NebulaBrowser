@@ -1,19 +1,83 @@
 # Feature status
 
-## Implemented in 1.0
+Nebula reports what the code actually does. Everything in **Working** runs in the
+current APK; **Limited** works with the documented constraints; **Not supported**
+is deliberately absent.
 
-Browsing, progress, navigation, file upload, external schemes, tabs, workspaces, private browsing restrictions, history, bookmarks + HTML interchange, downloads, password vault, search engine manager, smart calculations/conversions, native host filtering, reader/TTS, PDF print, voice search, QR tools, desktop mode, static extension reports, and consent-based remote AI.
+## Interface
 
-## Deliberately not represented as working
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Material You dynamic color | Working | Android 12+; falls back to the Nebula palette |
+| Curated accents | Working | Violet, cyan, magenta, lime, amber, cobalt |
+| Reduce motion | Working | Disables transitions, pulse and background drift |
+| Command Center | Working | Filterable list of every screen and tool |
+| Home greeting and live cards | Working | Visit counts, active downloads |
+| Five background styles | Working | `nebula`, `aurora`, `midnight`, `minimal`, plus light theme |
+| Adaptive tablet layout | Not supported | Phone layout only |
 
-- Chrome Web Store installation or execution of CRX extensions.
-- Firefox XPI execution, Gecko rendering, native messaging, or extension background workers.
-- Cross-device sync, passkeys, payment/address autofill, Android Autofill service.
-- Custom parallel-part downloader, scheduling, and user-controlled pause/resume. Android DownloadManager may pause transfers for OS/network reasons.
-- Full PDF annotation/editing, offline web archive, service-worker/PWA installation UI.
-- Per-origin camera/microphone/location grants; these are securely denied.
-- Complete filter-list compatibility (the native blocker uses a built-in host suffix set).
-- On-device AI, streaming responses, local translation models.
-- Full cookie/storage isolation equivalent to a separate browser profile. Android WebView shares process infrastructure.
+## Browsing
 
-See the roadmap for implementation order.
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Chromium System WebView engine | Working | HTTPS-first, mixed-content blocked, safe browsing |
+| Tabs, private tabs, groups, workspaces | Working | Group colours, drag-to-group, restore closed tab |
+| Session restore | Working | `WebView.saveState` snapshots per tab |
+| Smart omnibox | Working | URLs, `gh`/`w`/`d` keywords, maths, unit conversion |
+| Reader mode + text-to-speech | Working | Adjustable type size and reading time |
+| Find in page, desktop UA, print/PDF | Working | System print service |
+| QR generate and scan | Working | Camera permission required for scanning |
+| Voice search | Working | Depends on the device speech service |
+
+## Tools added in 3.1
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Screenshot | Working | Visible viewport, PNG, `Download/Nebula` |
+| Save page as Markdown | Working | Title, URL and readable text |
+| Save page as HTML | Working | `documentElement.outerHTML` |
+| Copy page text | Working | Whole readable article to the clipboard |
+| Clear cookies and site data | Working | Clears WebView cookies, storage and cache |
+| Download copy-link | Working | Other actions: open, share, retry, cancel, remove |
+| Full-page scrolled screenshot | Not supported | Needs scroll-and-stitch capture |
+
+## Data and privacy
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| History, bookmarks, HTML import/export | Working | Room-backed |
+| Download manager | Working | Android `DownloadManager`, Wi-Fi-only policy, notifications |
+| Password vault | Working | AES-GCM with a non-exportable Keystore key, biometric unlock |
+| Tracker/ad host blocking | Limited | Built-in host suffix list, not a full filter-list engine |
+| Per-site permission prompts | Limited | Camera, microphone and location only |
+| Per-site settings and site-data manager | Not supported | Planned for 3.2 |
+| Cross-device sync, passkeys | Not supported | No account exists |
+
+## AI
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Page assistant | Working | OpenAI-compatible endpoint, explicit consent dialog |
+| Research agent | Working | Safe action plan, exports text/PDF reports |
+| Streaming responses | Not supported | Single request/response |
+| On-device local model | Not supported | Planned |
+
+## Extensions
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Manifest/CRX/XPI/ZIP analyzer | Working | Static analysis only |
+| Userscripts (`@grant none`) | Working | Injected per declared `@match` |
+| Web Store installation or MV3 execution | Not supported | Requires a Chromium extension runtime |
+
+## Performance
+
+| Item | Status |
+| --- | --- |
+| R8 minification and resource shrinking | Enabled for release |
+| Debug-signed release artifact in CI | Enabled |
+| Gradle build cache and parallel builds | Enabled |
+| WebView provider pre-warm at startup | Enabled |
+| Compose stability configuration for shared models | Enabled |
+| Baseline profiles / startup macrobenchmarks | Not yet |
+| Room paging for large histories | Not yet |
