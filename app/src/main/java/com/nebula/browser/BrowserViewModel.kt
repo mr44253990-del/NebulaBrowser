@@ -594,11 +594,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun executeAgent(task: String, plan: List<AgentAction>, steps: List<AgentStep>) {
-        val report = StringBuilder("Nebula safe browser agent
-Created: ${java.util.Date()}
-Task: $task
-
-")
+        val report = StringBuilder(
+            buildString {
+                appendLine("Nebula safe browser agent")
+                appendLine("Created: ${java.util.Date()}")
+                appendLine("Task: $task")
+                appendLine()
+            },
+        )
         val sourceTabs = mutableListOf<String>()
         try {
             plan.forEachIndexed { index, action ->
@@ -615,8 +618,7 @@ Task: $task
                             delay(1_200)
                         }
                     }
-                    "go_back" -> { goBack(); delay(1_500); report.append("Went back in browser history.
-") }
+                    "go_back" -> { goBack(); delay(1_500); report.append("Went back in browser history.\n") }
                     "collect_pages" -> {
                         val targets = if (sourceTabs.isEmpty()) listOf(_state.value.activeTabId) else sourceTabs.toList()
                         targets.forEachIndexed { tabIndex, tabId ->
@@ -624,12 +626,10 @@ Task: $task
                             updateAgentStep(step.id, AgentStepStatus.RUNNING, "Collecting ${tabIndex + 1}/${targets.size}")
                             val text = awaitActivePageText()
                             val tab = _state.value.tabs.firstOrNull { it.id == tabId }
-                            report.append("
-=== SOURCE ${tabIndex + 1}: ${tab?.title.orEmpty()} ===
-${tab?.url.orEmpty()}
-")
-                            report.append(text.orEmpty().ifBlank { "[No readable text was available]" }.take(10_000)).append('
-')
+                            report.appendLine()
+                            report.appendLine("=== SOURCE ${tabIndex + 1}: ${tab?.title.orEmpty()} ===")
+                            report.appendLine(tab?.url.orEmpty())
+                            report.append(text.orEmpty().ifBlank { "[No readable text was available]" }.take(10_000)).append('\n')
                             updateAgentStep(step.id, AgentStepStatus.RUNNING, "Collected ${tabIndex + 1}/${targets.size}")
                         }
                     }
@@ -639,9 +639,8 @@ ${tab?.url.orEmpty()}
                             if (action.action == "export_pdf") ReportExporter.exportPdf(getApplication(), task, report.toString())
                             else ReportExporter.exportText(getApplication(), task, report.toString())
                         }
-                        report.append("
-Exported: $name
-")
+                        report.appendLine()
+                        report.appendLine("Exported: $name")
                         message("Report saved: Download/Nebula/$name")
                     }
                 }
