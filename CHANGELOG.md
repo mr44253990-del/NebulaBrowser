@@ -1,12 +1,14 @@
 # Nebula Browser 4.0
 
-## Unreleased — 4.1.0
+## 4.1.0 — drawer, AI workspace and tabs
 
 - Drawer: explicit close (X) button, search field, grouped sections, rounded sheet and version footer.
 - Bottom bars: new tab (+) button with long-press for private tabs on Home; compact quick bar with back, forward, new tab, tabs and menu while browsing a page.
 - AI: full-screen Nebula AI workspace with chat history, suggestion cards, quick prompts, consent-aware sending, conversation export and an agent timeline with progress, cancel and report export. The quick sheet gains a header, close button and Expand action.
 - Tabs: grid/list toggle, swipe-left to close in list mode, and a page menu split from the tab counter.
+- Launcher shortcuts: new tab, private tab, bookmarks and the tab switcher.
 - Diagnostics in Settings (from 4.0.1): crash log view, copy, share, clear and clean start.
+- Version `4.1.0` (versionCode 8).
 
 ## 4.0.1 — crash fix
 

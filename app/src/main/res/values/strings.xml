@@ -1,4 +1,12 @@
 <resources>
     <color name="nebula_system_bar">#05030B</color>
     <string name="app_name">Nebula Browser</string>
+    <string name="shortcut_new_tab">New tab</string>
+    <string name="shortcut_new_tab_long">Open a new tab in Nebula</string>
+    <string name="shortcut_private_tab">Private tab</string>
+    <string name="shortcut_private_tab_long">Open a private tab that keeps no history</string>
+    <string name="shortcut_bookmarks">Bookmarks</string>
+    <string name="shortcut_bookmarks_long">Open your bookmarks</string>
+    <string name="shortcut_tabs">Tabs</string>
+    <string name="shortcut_tabs_long">Open the tab switcher</string>
 </resources>

@@ -90,15 +90,21 @@ See [the 2.0 research notes](docs/RESEARCH_2_0.md) for Android platform guidance
 
 The AI agent is intentionally not an unrestricted arbitrary-action system. See the 3.0 research notes.
 
-## Nebula 4.0 experience update
+## Nebula 4.0 → 4.1 experience update
 
 - Material You dynamic color on Android 12+, six curated accents, and theme-aware glass surfaces, chips and buttons.
 - A shared motion system (duration tokens, spring press feedback, pulsing mark, animated progress) with a system-friendly **Reduce motion** switch.
+- A searchable drawer with grouped sections and an explicit close button.
+- New tab buttons on both bottom bars, with long-press for a private tab.
+- A full-screen Nebula AI workspace: chat history, quick prompts, export, and a research-agent timeline with progress, cancel and report export.
+- A tab switcher with grid/list modes, swipe-to-close and per-tab pin, group and workspace actions.
 - Command Center: a filterable sheet that reaches every screen and tool, opened from the bolt button on Home or the drawer.
 - Home shows a time-of-day greeting, live tab/bookmark counts and a live download card.
 - New page tools: screenshot, save as Markdown, save as HTML, copy article text, clear cookies/site data, and copy download links.
 - Release builds are R8-minified with resource shrinking and published next to the debug APK by CI.
-- Startup is faster and safer: live WebViews are restored lazily (four at a time) and a startup guard recovers from a previous crash instead of repeating it. Version 4.0.1 (versionCode 7).
+- Startup is faster and safer: live WebViews are restored lazily (four at a time) and a startup guard recovers from a previous crash instead of repeating it.
+- Launcher shortcuts jump straight to a new tab, a private tab, bookmarks or the tab switcher.
+- Version 4.1.0 (versionCode 8).
 
 ## Privacy and limitations
 

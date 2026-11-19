@@ -22,7 +22,7 @@ class MainActivity : FragmentActivity() {
             isAppearanceLightNavigationBars = false
         }
         setContent { NebulaApp(browserViewModel) }
-        intent?.data?.toString()?.let(browserViewModel::navigate)
+        handleIntent(intent)
     }
 
     override fun onPause() {
@@ -33,6 +33,25 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.data?.toString()?.let(browserViewModel::navigate)
+        handleIntent(intent)
+    }
+
+    /** Launcher shortcuts and external links land here. */
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        when (intent.action) {
+            ACTION_NEW_TAB -> browserViewModel.createTab()
+            ACTION_NEW_PRIVATE_TAB -> browserViewModel.createTab(privateMode = true)
+            ACTION_BOOKMARKS -> browserViewModel.openRoute("bookmarks")
+            ACTION_TABS -> browserViewModel.openRoute("tabs")
+            else -> intent.data?.toString()?.takeIf { it.isNotBlank() }?.let(browserViewModel::navigate)
+        }
+    }
+
+    companion object {
+        const val ACTION_NEW_TAB = "com.nebula.browser.action.NEW_TAB"
+        const val ACTION_NEW_PRIVATE_TAB = "com.nebula.browser.action.NEW_PRIVATE_TAB"
+        const val ACTION_BOOKMARKS = "com.nebula.browser.action.BOOKMARKS"
+        const val ACTION_TABS = "com.nebula.browser.action.TABS"
     }
 }

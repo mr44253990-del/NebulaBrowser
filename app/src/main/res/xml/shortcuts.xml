@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_tab"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_new_tab"
+        android:shortcutLongLabel="@string/shortcut_new_tab_long">
+        <intent
+            android:action="com.nebula.browser.action.NEW_TAB"
+            android:targetPackage="com.nebula.browser"
+            android:targetClass="com.nebula.browser.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="private_tab"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_private_tab"
+        android:shortcutLongLabel="@string/shortcut_private_tab_long">
+        <intent
+            android:action="com.nebula.browser.action.NEW_PRIVATE_TAB"
+            android:targetPackage="com.nebula.browser"
+            android:targetClass="com.nebula.browser.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="bookmarks"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_bookmarks"
+        android:shortcutLongLabel="@string/shortcut_bookmarks_long">
+        <intent
+            android:action="com.nebula.browser.action.BOOKMARKS"
+            android:targetPackage="com.nebula.browser"
+            android:targetClass="com.nebula.browser.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="tabs"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_tabs"
+        android:shortcutLongLabel="@string/shortcut_tabs_long">
+        <intent
+            android:action="com.nebula.browser.action.TABS"
+            android:targetPackage="com.nebula.browser"
+            android:targetClass="com.nebula.browser.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

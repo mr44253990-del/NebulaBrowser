@@ -145,6 +145,12 @@ private fun NebulaAppContent(viewModel: BrowserViewModel, state: com.nebula.brow
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var screen by remember { mutableStateOf(AppScreen.BROWSER) }
+    LaunchedEffect(state.pendingRoute) {
+        when (state.pendingRoute) {
+            "tabs" -> { screen = AppScreen.TABS; viewModel.consumeRoute() }
+            "bookmarks" -> { screen = AppScreen.BOOKMARKS; viewModel.consumeRoute() }
+        }
+    }
     var showFind by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
     var showAi by remember { mutableStateOf(false) }

@@ -12,6 +12,9 @@ is deliberately absent.
 | Curated accents | Working | Violet, cyan, magenta, lime, amber, cobalt |
 | Reduce motion | Working | Disables transitions, pulse and background drift |
 | Command Center | Working | Filterable list of every screen and tool |
+| Drawer | Working | Grouped sections, search field, explicit close button, swipe to close |
+| Bottom bars | Working | New tab (+) with long-press private tab; compact quick bar while browsing |
+| Launcher shortcuts | Working | New tab, private tab, bookmarks and tab switcher |
 | Home greeting and live cards | Working | Visit counts, active downloads |
 | Five background styles | Working | `nebula`, `aurora`, `midnight`, `minimal`, plus light theme |
 | Adaptive tablet layout | Not supported | Phone layout only |
@@ -22,6 +25,7 @@ is deliberately absent.
 | --- | --- | --- |
 | Chromium System WebView engine | Working | HTTPS-first, mixed-content blocked, safe browsing |
 | Tabs, private tabs, groups, workspaces | Working | Group colours, drag-to-group, restore closed tab |
+| Tab switcher views | Working | Grid and list, search, swipe-left to close in list mode |
 | Session restore | Working | `WebView.saveState` snapshots per tab |
 | Smart omnibox | Working | URLs, `gh`/`w`/`d` keywords, maths, unit conversion |
 | Reader mode + text-to-speech | Working | Adjustable type size and reading time |
@@ -58,7 +62,8 @@ is deliberately absent.
 | Feature | Status | Notes |
 | --- | --- | --- |
 | Page assistant | Working | OpenAI-compatible endpoint, explicit consent dialog |
-| Research agent | Working | Safe action plan, exports text/PDF reports |
+| Full-screen AI workspace | Working | Chat history, quick prompts, copy and transcript export |
+| Research agent | Working | Safe action plan, progress timeline, cancel, exports text/PDF reports |
 | Streaming responses | Not supported | Single request/response |
 | On-device local model | Not supported | Planned |
 

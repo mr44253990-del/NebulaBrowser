@@ -106,6 +106,7 @@ data class BrowserUiState(
     val aiLoading: Boolean = false,
     val aiResponse: String = "",
     val aiChat: List<AiChatMessage> = emptyList(),
+    val pendingRoute: String? = null,
     val aiConsent: PendingAiRequest? = null,
     val pendingPermission: SitePermissionRequest? = null,
     val developerOutput: String = "",
@@ -417,6 +418,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun updateSettings(transform: (BrowserSettings) -> BrowserSettings) {
         viewModelScope.launch { settingsRepository.update(transform) }
     }
+
+    /** A launch shortcut asked for a screen; the UI consumes it once. */
+    fun openRoute(route: String) = _state.update { it.copy(pendingRoute = route) }
+
+    fun consumeRoute() = _state.update { it.copy(pendingRoute = null) }
 
     fun addCustomSearchEngine(name: String, keyword: String, queryUrl: String) {
         if (name.isBlank() || keyword.isBlank() || !queryUrl.contains("%s")) {
