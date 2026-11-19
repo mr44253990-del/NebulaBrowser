@@ -61,6 +61,14 @@ The UI communicates with `BrowserEngine`/`BrowserSession`, not directly with Web
 
 See [the 2.0 research notes](docs/RESEARCH_2_0.md) for Android platform guidance and future candidates.
 
+
+## Nebula 2.1 readability and compact-toolbar update
+
+- Explicit high-contrast text, placeholder, icon, button and card colors for dark and light themes.
+- Dark system status/navigation bars prevent white-on-white system text over light webpages.
+- Webpages use one compact 52dp address toolbar instead of separate address and navigation bars; the 58dp navigation dock remains on Home/Tabs.
+- Premium nebula clouds, cyan/purple orbital waves, and a layered 3D planet mark.
+
 ## Privacy and limitations
 
 Nebula has no app server and no analytics. Web requests go to visited sites. AI requests go directly to the user's configured provider only after confirmation. See [PRIVACY.md](docs/PRIVACY.md).

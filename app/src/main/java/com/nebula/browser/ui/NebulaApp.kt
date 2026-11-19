@@ -327,8 +327,12 @@ private fun BrowserContent(
         },
         bottomBar = {
             Column {
-                if (state.settings.bottomToolbar) AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu)
-                NebulaBottomBar(state, viewModel::goBack, viewModel::goForward, viewModel::newHomeTab, if (state.loading) viewModel::stop else viewModel::reload, onTabs)
+                if (state.settings.bottomToolbar && !state.isHome) {
+                    AddressBar(state, viewModel::navigate, viewModel::goBack, onTabs, onMenu)
+                }
+                if (state.isHome) {
+                    NebulaBottomBar(state, viewModel::goBack, viewModel::goForward, viewModel::newHomeTab, if (state.loading) viewModel::stop else viewModel::reload, onTabs)
+                }
             }
         },
     ) { padding ->

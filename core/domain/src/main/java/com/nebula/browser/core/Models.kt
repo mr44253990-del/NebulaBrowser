@@ -154,7 +154,7 @@ object DefaultHomeShortcuts {
         HomeShortcut("wikipedia", "Wikipedia", "https://wikipedia.org", "W", 0xFFEEEEEE),
         HomeShortcut("github", "GitHub", "https://github.com", "GH", 0xFFF5F5F5),
         HomeShortcut("gmail", "Gmail", "https://mail.google.com", "M", 0xFFEA4335),
-        HomeShortcut("duckduckgo", "DuckDuckGo", "https://duckduckgo.com", "D", 0xFFDE5833),
+        HomeShortcut("drive", "Drive", "https://drive.google.com", "D", 0xFF34A853),
         HomeShortcut("facebook", "Facebook", "https://facebook.com", "f", 0xFF1877F2),
     )
 }

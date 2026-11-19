@@ -2,8 +2,10 @@
     <style name="Theme.NebulaBrowser" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@color/nebula_system_bar</item>
+        <item name="android:navigationBarColor">@color/nebula_system_bar</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">@color/nebula_system_bar</item>
     </style>
 </resources>

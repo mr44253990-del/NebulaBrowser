@@ -115,7 +115,9 @@ class SettingsRepository(private val context: Context) {
                         item.optString("symbol", item.getString("title").take(1)), item.optLong("color", 0xFF7C4DFF)))
                 }
             }
-        }.getOrDefault(DefaultHomeShortcuts.all)
+        }.getOrDefault(DefaultHomeShortcuts.all).map { shortcut ->
+            if (shortcut.id == "duckduckgo" && shortcut.url == "https://duckduckgo.com") DefaultHomeShortcuts.all.first { it.id == "drive" } else shortcut
+        }
     }
 
     private object Keys {

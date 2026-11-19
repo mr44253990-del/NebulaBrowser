@@ -1,3 +1,4 @@
 <resources>
+    <color name="nebula_system_bar">#05030B</color>
     <string name="app_name">Nebula Browser</string>
 </resources>

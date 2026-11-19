@@ -54,21 +54,26 @@ fun SpaceBackground(modifier: Modifier = Modifier, content: @Composable BoxScope
     )) {
         Canvas(Modifier.fillMaxSize()) {
             if (dark) {
-                stars.forEach { star ->
-                    drawCircle(Color.White.copy(alpha = 0.25f + star.third / 8f), star.third, Offset(size.width * star.first, size.height * star.second))
-                }
-                drawArc(
-                    Brush.linearGradient(listOf(NebulaViolet.copy(alpha = 0f), NebulaPurple.copy(alpha = .45f), NebulaCyan.copy(alpha = .05f))),
-                    startAngle = 192f, sweepAngle = 156f, useCenter = false,
-                    topLeft = Offset(-size.width * .35f, size.height * .72f),
-                    size = androidx.compose.ui.geometry.Size(size.width * 1.7f, size.height * .35f),
-                    style = Stroke(width = 3.dp.toPx()),
+                drawCircle(
+                    Brush.radialGradient(listOf(Color(0xFF4B1599).copy(alpha = .30f), Color(0xFF120626).copy(alpha = .08f), Color.Transparent)),
+                    radius = size.width * .85f, center = Offset(size.width * .96f, size.height * .05f),
                 )
                 drawCircle(
-                    Brush.radialGradient(listOf(NebulaViolet.copy(alpha = .12f), Color.Transparent)),
-                    radius = size.width * .7f,
-                    center = Offset(size.width * .9f, size.height * .08f),
+                    Brush.radialGradient(listOf(Color(0xFF321176).copy(alpha = .24f), Color.Transparent)),
+                    radius = size.width * .72f, center = Offset(-size.width * .08f, size.height * .82f),
                 )
+                stars.forEach { star ->
+                    drawCircle(Color.White.copy(alpha = 0.35f + star.third / 7f), star.third, Offset(size.width * star.first, size.height * star.second))
+                }
+                val waveBrush = Brush.linearGradient(listOf(NebulaViolet.copy(alpha = .05f), NebulaPurple.copy(alpha = .7f), NebulaCyan.copy(alpha = .32f), NebulaViolet.copy(alpha = .05f)))
+                listOf(0f, 22f, 44f).forEachIndexed { index, offset ->
+                    drawArc(
+                        waveBrush, startAngle = 190f + index * 5, sweepAngle = 160f, useCenter = false,
+                        topLeft = Offset(-size.width * .28f, size.height * .77f + offset),
+                        size = androidx.compose.ui.geometry.Size(size.width * 1.56f, size.height * .30f),
+                        style = Stroke(width = (2.2f - index * .4f).dp.toPx()),
+                    )
+                }
             }
         }
         content()
@@ -85,7 +90,10 @@ fun GlassCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(radius)
-    val colors = CardDefaults.cardColors(containerColor = if (active) Color(0xD92D1A51) else MaterialTheme.colorScheme.surface.copy(alpha = .68f))
+    val colors = CardDefaults.cardColors(
+        containerColor = if (active) Color(0xD92D1A51) else MaterialTheme.colorScheme.surface.copy(alpha = .78f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    )
     val border = androidx.compose.foundation.BorderStroke(if (active) 1.5.dp else 1.dp, if (active) NebulaPurple else NebulaOutline)
     if (onClick != null) Card(onClick = onClick, modifier = modifier, shape = shape, colors = colors, border = border, content = content)
     else Card(modifier = modifier, shape = shape, colors = colors, border = border, content = content)
@@ -101,7 +109,7 @@ fun NeonButton(
     Button(
         onClick = onClick,
         modifier = modifier.height(50.dp).clip(RoundedCornerShape(18.dp)).border(1.dp, NebulaPurple.copy(alpha = .7f), RoundedCornerShape(18.dp)),
-        colors = ButtonDefaults.buttonColors(containerColor = NebulaViolet),
+        colors = ButtonDefaults.buttonColors(containerColor = NebulaViolet, contentColor = Color.White),
         contentPadding = ButtonDefaults.ContentPadding,
     ) {
         leadingIcon?.invoke()

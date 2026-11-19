@@ -121,17 +121,18 @@ fun AddressBar(
             modifier = Modifier.fillMaxWidth().height(2.dp),
         )
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack, enabled = state.canGoBack) {
-                Icon(Icons.Default.ArrowBack, "Back")
+                Icon(Icons.Default.ArrowBack, "Back", tint = if (state.canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f))
             }
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Search or enter address") },
+                modifier = Modifier.weight(1f).height(52.dp),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                placeholder = { Text("Search or enter address", maxLines = 1, fontSize = 13.sp) },
                 singleLine = true,
                 shape = RoundedCornerShape(26.dp),
                 leadingIcon = {
@@ -144,11 +145,23 @@ fun AddressBar(
                 trailingIcon = {
                     if (text.isNotEmpty()) IconButton(onClick = { text = "" }) { Icon(Icons.Default.Close, "Clear") }
                 },
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedPlaceholderTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedPlaceholderTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    cursorColor = NebulaCyan,
+                    focusedBorderColor = NebulaPurple,
+                    unfocusedBorderColor = NebulaOutline,
+                ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { onNavigate(text) }),
             )
+            if (state.currentUrl.isNotBlank()) IconButton(onClick = { onNavigate(state.currentUrl) }, modifier = Modifier.size(38.dp)) {
+                Icon(Icons.Default.Refresh, "Reload", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
+            }
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.Tab, "${state.tabs.size} tabs")
                 }
                 if (state.tabs.isNotEmpty()) Text(
@@ -161,7 +174,7 @@ fun AddressBar(
                     DropdownMenuItem(text = { Text("Browser menu") }, onClick = { menuExpanded = false; onMenu() })
                 }
             }
-            IconButton(onClick = onMenu) { Icon(Icons.Default.MoreVert, "Menu") }
+            IconButton(onClick = onMenu, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "Menu", tint = MaterialTheme.colorScheme.onSurface) }
         }
     }
 }
@@ -180,14 +193,41 @@ fun WebSessionView(session: BrowserSession?) {
 @Composable
 private fun NebulaMark(modifier: Modifier = Modifier) {
     androidx.compose.foundation.Canvas(modifier) {
-        drawCircle(NebulaPurple.copy(alpha = .28f), radius = size.minDimension * .46f)
-        drawCircle(NebulaPurple, radius = size.minDimension * .29f, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+        val radius = size.minDimension / 2f
+        val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+        drawCircle(Brush.radialGradient(listOf(NebulaPurple.copy(alpha = .36f), Color.Transparent)), radius = radius * 1.45f, center = center)
+        androidx.compose.ui.graphics.drawscope.withTransform({
+            rotate(-17f, pivot = center)
+            scale(1f, .42f, pivot = center)
+        }) {
+            drawOval(
+                Brush.linearGradient(listOf(NebulaPurple, NebulaCyan, Color(0xFF4E7CFF), NebulaPurple)),
+                topLeft = androidx.compose.ui.geometry.Offset(size.width * .03f, size.height * .14f),
+                size = androidx.compose.ui.geometry.Size(size.width * .94f, size.height * .72f),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5.dp.toPx()),
+            )
+        }
+        drawCircle(
+            Brush.radialGradient(
+                colors = listOf(Color(0xFFE8D9FF), Color(0xFFB168FF), Color(0xFF5A1EA8), Color(0xFF120625)),
+                center = androidx.compose.ui.geometry.Offset(center.x - radius * .24f, center.y - radius * .30f),
+                radius = radius * 1.12f,
+            ),
+            radius = radius * .66f, center = center,
+        )
+        drawCircle(
+            Brush.radialGradient(listOf(Color.White.copy(alpha = .24f), Color.Transparent)),
+            radius = radius * .42f,
+            center = androidx.compose.ui.geometry.Offset(center.x - radius * .22f, center.y - radius * .30f),
+        )
         drawArc(
-            NebulaCyan, 195f, 330f, false,
-            topLeft = androidx.compose.ui.geometry.Offset(-size.width * .12f, size.height * .28f),
-            size = androidx.compose.ui.geometry.Size(size.width * 1.24f, size.height * .46f),
+            Brush.linearGradient(listOf(NebulaPurple, NebulaCyan, Color(0xFF6688FF))),
+            startAngle = 12f, sweepAngle = 166f, useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(size.width * .03f, size.height * .32f),
+            size = androidx.compose.ui.geometry.Size(size.width * .94f, size.height * .36f),
             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round),
         )
+        drawCircle(Color.White, radius = 1.4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(size.width * .88f, size.height * .10f))
     }
 }
 
@@ -229,9 +269,9 @@ fun HomePage(
             }
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(8.dp))
-                NebulaMark(Modifier.size(72.dp))
+                NebulaMark(Modifier.size(98.dp))
                 Text("NEBULA", fontSize = 38.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onBackground)
-                Text("Browse beyond boundaries", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Browse beyond boundaries", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.height(22.dp))
             OutlinedTextField(
@@ -247,7 +287,13 @@ fun HomePage(
                 singleLine = true, shape = RoundedCornerShape(28.dp),
                 colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = NebulaPurple, unfocusedBorderColor = NebulaPurple.copy(alpha = .75f),
-                    focusedContainerColor = Color(0xCC100A20), unfocusedContainerColor = Color(0xB0100A20),
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedPlaceholderTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedPlaceholderTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    cursorColor = NebulaCyan,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = .9f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = .82f),
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { if (query.isNotBlank()) onNavigate(query) }),
@@ -351,15 +397,15 @@ fun HomePage(
 
 @Composable
 fun NebulaBottomBar(state: BrowserUiState, onBack: () -> Unit, onForward: () -> Unit, onHome: () -> Unit, onReload: () -> Unit, onTabs: () -> Unit) {
-    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).height(62.dp), radius = 26.dp) {
+    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).height(58.dp), radius = 25.dp) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, enabled = state.canGoBack) { Icon(Icons.Default.ArrowBack, "Back") }
-            IconButton(onClick = onForward, enabled = state.canGoForward) { Icon(Icons.Default.ArrowForward, "Forward") }
+            IconButton(onClick = onBack, enabled = state.canGoBack) { Icon(Icons.Default.ArrowBack, "Back", tint = if (state.canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
+            IconButton(onClick = onForward, enabled = state.canGoForward) { Icon(Icons.Default.ArrowForward, "Forward", tint = if (state.canGoForward) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
             Box(Modifier.size(46.dp).background(NebulaViolet, RoundedCornerShape(50)).clickable(onClick = onHome), contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, "Home", tint = Color.White) }
-            IconButton(onClick = onReload) { Icon(if (state.loading) Icons.Default.Close else Icons.Default.Refresh, "Reload or stop") }
+            IconButton(onClick = onReload) { Icon(if (state.loading) Icons.Default.Close else Icons.Default.Refresh, "Reload or stop", tint = MaterialTheme.colorScheme.onSurface) }
             Box(contentAlignment = Alignment.Center) {
-                IconButton(onClick = onTabs) { Icon(Icons.Default.Tab, "Tabs") }
-                Text(state.tabs.size.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+                IconButton(onClick = onTabs) { Icon(Icons.Default.Tab, "Tabs", tint = MaterialTheme.colorScheme.onSurface) }
+                Text(state.tabs.size.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }
@@ -392,7 +438,7 @@ fun TabSwitcher(
     val tabs = workspaceTabs.filter { selectedGroup == null || it.groupName == selectedGroup }
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Row(Modifier.height(60.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = if (state.canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)) }
             Text("Workspaces & tabs", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             TextButton(onClick = onRestore) { Text("Restore") }
             IconButton(onClick = { onNew(false) }) { Icon(Icons.Default.Add, "New tab", tint = NebulaPurple) }
@@ -402,7 +448,7 @@ fun TabSwitcher(
                 FilterChip(
                     selected = state.activeWorkspaceId == workspace.id, onClick = { onWorkspace(workspace.id); selectedGroup = null },
                     label = { Text(workspace.name, fontSize = 13.sp) }, modifier = Modifier.height(44.dp),
-                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = NebulaViolet),
+                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = NebulaViolet, selectedLabelColor = Color.White, selectedLeadingIconColor = Color.White),
                 )
             }
         }
@@ -443,7 +489,7 @@ fun TabSwitcher(
                         if (preview != null) Image(preview.asImageBitmap(), "Preview of ${tab.title}", modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                         else Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             NebulaMark(Modifier.size(52.dp))
-                            Text(tab.url.substringAfter("://").substringBefore('/').ifBlank { "New tab" }, fontSize = 11.sp, maxLines = 1)
+                            Text(tab.url.substringAfter("://").substringBefore('/').ifBlank { "New tab" }, fontSize = 11.sp, maxLines = 1, color = Color.White)
                         }
                     }
                     Row(Modifier.fillMaxWidth().padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
